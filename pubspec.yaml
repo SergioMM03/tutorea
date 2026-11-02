@@ -1,0 +1,28 @@
+name: tutorea
+description: Tutorea - plataforma de tutorías entre estudiantes de ESEN.
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  provider: ^6.1.2
+  shared_preferences: ^2.3.2
+  # Fotografía de perfil opcional del tutor (galería del dispositivo).
+  image_picker: ^1.1.2
+  # Carpeta permanente de la app para guardar la copia de la fotografía.
+  path_provider: ^2.1.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'data/local/local_repositories.dart';
+import 'data/supabase/supabase_bootstrap.dart';
 import 'routes/app_navigator.dart';
 import 'routes/routes.dart';
 import 'state/app_providers.dart';
@@ -12,6 +13,11 @@ Future<void> main() async {
 
   // Abre la base local (shared_preferences) y carga los datos iniciales.
   final repositories = await LocalRepositories.open();
+
+  // Fase 14.3: Supabase se inicializa solo con configuración válida
+  // (--dart-define-from-file). Todavía no se usa: los datos siguen siendo
+  // locales. Si no hay configuración o falla, la app arranca igual que antes.
+  await SupabaseBootstrap.initializeIfConfigured();
 
   // Con sesión guardada abre directo en la pantalla de su rol;
   // sin sesión, en la selección de universidad.

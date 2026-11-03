@@ -51,6 +51,9 @@ app.*.map.json
 .env
 .env.*
 !.env.example
+# Configuración de Supabase para --dart-define-from-file (solo el ejemplo va al repo)
+env/*.json
+!env/*.example.json
 **/*secret*
 **/*service_role*
 

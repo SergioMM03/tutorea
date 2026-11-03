@@ -16,6 +16,7 @@ dependencies:
   image_picker: ^1.1.2
   # Carpeta permanente de la app para guardar la copia de la fotografía.
   path_provider: ^2.1.4
+  supabase_flutter: ^2.18.3
 
 dev_dependencies:
   flutter_test:

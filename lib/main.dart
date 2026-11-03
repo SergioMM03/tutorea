@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'config/auth_mode.dart';
 import 'data/local/local_repositories.dart';
+import 'data/supabase/auth_selection.dart';
+import 'data/supabase/supabase_auth_repository.dart';
 import 'data/supabase/supabase_bootstrap.dart';
 import 'routes/app_navigator.dart';
 import 'routes/routes.dart';
@@ -19,13 +22,23 @@ Future<void> main() async {
   // locales. Si no hay configuración o falla, la app arranca igual que antes.
   await SupabaseBootstrap.initializeIfConfigured();
 
+  // Fase 14.5: con TUTOREA_AUTH=supabase (y Supabase inicializado) las cuentas y
+  // la sesión usan Supabase Auth; si no, la autenticación local de siempre.
+  final auth = selectAuthRepository(
+    mode: AuthMode.fromEnvironment(),
+    supabaseReady: SupabaseBootstrap.isReady,
+    local: repositories.auth,
+    remote: () => SupabaseAuthRepository.fromInitializedClient(legacyUsers: repositories.auth),
+  );
+
   // Con sesión guardada abre directo en la pantalla de su rol;
   // sin sesión, en la selección de universidad.
-  final session = await repositories.auth.currentSession();
+  final session = await auth.currentSession();
   final initialRoute = AppNavigator.initialRouteFor(session);
 
   runApp(AppProviders.local(
     repositories,
+    auth: auth,
     child: TutoreaApp(initialRoute: initialRoute),
   ));
 }

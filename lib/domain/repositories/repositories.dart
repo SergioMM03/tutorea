@@ -2,6 +2,7 @@
 library;
 
 export 'auth_repository.dart';
+export 'auth_session_changes.dart';
 export 'booking_repository.dart';
 export 'profile_photo_repository.dart';
 export 'repository_exception.dart';

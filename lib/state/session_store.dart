@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../domain/models/models.dart';
@@ -34,6 +36,9 @@ class SessionStore extends ChangeNotifier {
   University? _selectedUniversity;
   List<Career> _selectedCareers = const [];
   bool _universityMismatch = false;
+
+  /// Avisos de fin de sesión remota (solo si el repositorio los ofrece).
+  StreamSubscription<Session>? _sessionChanges;
 
   // ---------------- Lectura ----------------
 
@@ -79,6 +84,11 @@ class SessionStore extends ChangeNotifier {
   Future<void> load() async {
     _session = await _auth.currentSession();
     _initialized = true;
+    // AuthSessionChanges no es subtipo de AuthRepository: se usa un patrón
+    // para obtener la variable con el tipo correcto.
+    if (_auth case final AuthSessionChanges changes) {
+      _sessionChanges ??= changes.sessionChanges.listen(_onSessionChange);
+    }
     notifyListeners();
     await loadUniversities();
   }
@@ -280,7 +290,21 @@ class SessionStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  @override
+  void dispose() {
+    _sessionChanges?.cancel();
+    super.dispose();
+  }
+
   // ---------------- Interno ----------------
+
+  /// La sesión terminó fuera de la app (p. ej. Supabase no pudo renovarla).
+  void _onSessionChange(Session session) {
+    if (session.iniciada || !_session.iniciada) return;
+    _session = const Session.empty();
+    _users.clear();
+    notifyListeners();
+  }
 
   /// Ejecuta una acción con estado de carga y captura el error de negocio.
   Future<bool> _run(Future<void> Function() action) async {

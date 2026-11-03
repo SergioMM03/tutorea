@@ -65,4 +65,21 @@ Consulta exitosa: en la consola y en pantalla (barra verde) aparece
 `[Diagnóstico catálogo] RESULTADO: OK — el catálogo remoto coincide con el local (1 universidad, 4 carreras, 13 materias).`
 Si algo falla aparece `RESULTADO: ERROR` o `RESULTADO: DIFERENCIAS` con el detalle (barra roja).
 
+### Autenticación con Supabase (Fase 14.5)
+
+Por defecto las cuentas siguen siendo locales. Para registrar e iniciar sesión con
+Supabase Auth se agrega `TUTOREA_AUTH=supabase`:
+
+    flutter run --dart-define-from-file=env/supabase.dev.json --dart-define=TUTOREA_AUTH=supabase
+
+En la consola aparece `[Auth] Supabase Auth activo. Tutores, reservas y catálogo siguen en modo local.`
+Si Supabase no está configurado o no se inicializa, aparece `[Auth] ... Modo local.` y la app
+usa las cuentas locales de siempre.
+
+- El registro crea la cuenta en Supabase Auth; el perfil lo crea la base (trigger
+  `handle_new_user`) con la universidad, carrera, año y rol (solo estudiante o tutor).
+- La sesión queda guardada por supabase_flutter y se recupera al reabrir la app.
+- Las cuentas locales y del seed no se migran: en modo Supabase hay que registrarse de nuevo.
+- Todavía no disponible con Supabase: editar el perfil (Fase 14.6) y cuentas de administrador.
+
 Esquema de la base, seed y pruebas SQL: ver `supabase/README.md`.

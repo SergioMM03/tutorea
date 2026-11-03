@@ -37,15 +37,18 @@ class AppProviders extends StatelessWidget {
   /// `AppProviders.firebase(...)` y se cambia la llamada en main.dart.
   /// [photos]: selector de fotografías; por defecto la galería del dispositivo
   /// (las pruebas pasan uno falso).
+  /// [auth]: reemplaza solo la autenticación (Fase 14.5: Supabase Auth); el resto
+  /// de los repositorios sigue siendo local. Por defecto, la autenticación local.
   factory AppProviders.local(
     LocalRepositories repos, {
     Key? key,
     ProfilePhotoRepository? photos,
+    AuthRepository? auth,
     required Widget child,
   }) =>
       AppProviders(
         key: key,
-        auth: repos.auth,
+        auth: auth ?? repos.auth,
         subjects: repos.subjects,
         tutors: repos.tutors,
         bookings: repos.bookings,

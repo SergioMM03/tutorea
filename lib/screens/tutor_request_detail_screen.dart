@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../domain/models/models.dart';
+import '../state/booking_actions.dart';
 import '../state/booking_store.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_back_button.dart';
+import '../widgets/booking_follow_up_section.dart';
 import '../widgets/booking_status_badge.dart';
 import '../widgets/bottom_action_bar.dart';
 import '../widgets/form_error_banner.dart';
@@ -17,7 +19,8 @@ import '../widgets/tutor_avatar.dart';
 import '../widgets/tutor_request_card.dart';
 
 /// Detalle de una solicitud recibida. Si está pendiente, el tutor puede
-/// aceptarla o rechazarla (con confirmación).
+/// aceptarla o rechazarla (con confirmación). Si está aceptada, puede
+/// cancelarla antes de la hora de inicio, con motivo.
 class TutorRequestDetailScreen extends StatefulWidget {
   final String bookingId;
   const TutorRequestDetailScreen({super.key, required this.bookingId});
@@ -74,6 +77,15 @@ class _TutorRequestDetailScreenState extends State<TutorRequestDetailScreen> {
     );
   }
 
+  Future<void> _cancelAccepted(Booking booking) async {
+    if (_busy) return;
+    final motivo = await askCancelReason(context);
+    if (motivo == null || !mounted) return;
+    setState(() => _busy = true);
+    await cancelBookingWithFeedback(context, booking, motivo: motivo);
+    if (mounted) setState(() => _busy = false);
+  }
+
   Future<void> _change({
     required bool confirmed,
     required Future<bool> Function(BookingStore store) action,
@@ -113,6 +125,7 @@ class _TutorRequestDetailScreenState extends State<TutorRequestDetailScreen> {
 
     final view = TutorRequestView.of(context, booking);
     final pending = booking.estado == BookingStatus.pendiente;
+    final cancellable = store.canCancelAsTutor(booking);
     final working = _busy || store.isLoading;
 
     return Scaffold(
@@ -165,22 +178,49 @@ class _TutorRequestDetailScreenState extends State<TutorRequestDetailScreen> {
                 RequestInfoRow(icon: Icons.calendar_today_outlined, label: 'Fecha', value: view.fecha),
                 RequestInfoRow(icon: Icons.access_time_rounded, label: 'Hora', value: view.hora),
                 RequestInfoRow(icon: Icons.timelapse_rounded, label: 'Duración', value: view.duracion),
+                RequestInfoRow(
+                    icon: Icons.videocam_outlined,
+                    label: 'Modalidad',
+                    value: booking.modalidad?.label ?? '—'),
+                if (booking.ubicacion != null)
+                  RequestInfoRow(
+                      icon: Icons.place_outlined,
+                      label: booking.modalidad == TutoringModality.virtual ? 'Enlace' : 'Lugar',
+                      value: booking.ubicacion!),
                 RequestInfoRow(icon: Icons.payments_outlined, label: 'Precio', value: view.precio),
+                if (booking.motivoCancelacion != null)
+                  RequestInfoRow(
+                      icon: Icons.info_outline_rounded,
+                      label: 'Motivo',
+                      value: booking.motivoCancelacion!),
               ]),
               if (!pending) ...[
                 const SizedBox(height: AppSpacing.lg),
                 Text(
                   'Esta solicitud ya está ${booking.estado.label.toLowerCase()} '
-                  'y no se puede modificar.',
+                  'y no se puede modificar.'
+                  '${cancellable ? ' Puedes cancelarla antes de la hora de inicio indicando el motivo.' : ''}'
+                  '${booking.estado == BookingStatus.cancelada ? (booking.canceladaPor == booking.studentId ? ' La canceló el estudiante.' : ' La cancelaste tú.') : ''}',
                   style: textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
                 ),
               ],
+              // Fase 14.9: confirmación, incidencias y calificación recibida.
+              BookingFollowUpSection(booking: booking, party: BookingParty.tutor),
             ],
           ),
         ),
       ),
-      // Los botones solo existen mientras la solicitud está pendiente.
-      bottomNavigationBar: !pending
+      // Pendiente: aceptar o rechazar. Aceptada y antes del inicio: cancelar con motivo.
+      bottomNavigationBar: cancellable
+          ? BottomActionBar(
+              child: SecondaryButton(
+                label: 'Cancelar sesión',
+                icon: Icons.close_rounded,
+                loading: working,
+                onPressed: working ? null : () => _cancelAccepted(booking),
+              ),
+            )
+          : !pending
           ? null
           : BottomActionBar(
               child: Row(

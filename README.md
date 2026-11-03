@@ -65,21 +65,27 @@ Consulta exitosa: en la consola y en pantalla (barra verde) aparece
 `[Diagnóstico catálogo] RESULTADO: OK — el catálogo remoto coincide con el local (1 universidad, 4 carreras, 13 materias).`
 Si algo falla aparece `RESULTADO: ERROR` o `RESULTADO: DIFERENCIAS` con el detalle (barra roja).
 
-### Autenticación con Supabase (Fase 14.5)
+### Modo Supabase (Fases 14.5 a 14.7)
 
-Por defecto las cuentas siguen siendo locales. Para registrar e iniciar sesión con
-Supabase Auth se agrega `TUTOREA_AUTH=supabase`:
+Por defecto todo sigue siendo local. Con `TUTOREA_AUTH=supabase`, las cuentas, los
+perfiles, el catálogo (universidades, carreras y materias) y los tutores con su
+disponibilidad vienen de Supabase:
 
     flutter run --dart-define-from-file=env/supabase.dev.json --dart-define=TUTOREA_AUTH=supabase
 
-En la consola aparece `[Auth] Supabase Auth activo. Tutores, reservas y catálogo siguen en modo local.`
-Si Supabase no está configurado o no se inicializa, aparece `[Auth] ... Modo local.` y la app
-usa las cuentas locales de siempre.
+En la consola aparece `[Datos] Supabase activo: cuentas, perfiles, catálogo, tutores y disponibilidad. Las reservas siguen en modo local.`
+Si Supabase no está configurado o no se inicializa, aparece `[Datos] ... Modo local.`
 
-- El registro crea la cuenta en Supabase Auth; el perfil lo crea la base (trigger
-  `handle_new_user`) con la universidad, carrera, año y rol (solo estudiante o tutor).
-- La sesión queda guardada por supabase_flutter y se recupera al reabrir la app.
-- Las cuentas locales y del seed no se migran: en modo Supabase hay que registrarse de nuevo.
-- Todavía no disponible con Supabase: editar el perfil (Fase 14.6) y cuentas de administrador.
+Requisito para tutores: haber desplegado las migraciones 12 a 15 (ver `supabase/README.md`).
+
+- Registro: la cuenta se crea en Supabase Auth y el perfil lo crea la base (`handle_new_user`).
+- Editar perfil: nombre, carrera y año en `profiles` (solo el propio).
+- Perfil de tutor: descripción, tarifa, modalidades, materias, horarios y visibilidad se guardan
+  juntos con `save_tutor_profile`; solo una cuenta tutor puede tenerlo y solo el propio.
+- Búsqueda: tutores activos de la misma universidad (RLS), con filtros por materia, categoría,
+  modalidad y disponibilidad.
+- Todavía locales: reservas (validan contra los tutores remotos). Aún no: fotografía del tutor
+  en Supabase (Storage), cuentas demo y administradores en la app.
+- Las cuentas, tutores y reservas locales no se migran: en modo Supabase empiezan vacíos.
 
 Esquema de la base, seed y pruebas SQL: ver `supabase/README.md`.

@@ -11,6 +11,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../widgets/app_bottom_nav.dart';
 import '../widgets/app_logo.dart';
+import '../widgets/notification_bell.dart';
 import '../widgets/section_title.dart';
 import '../widgets/subject_chip.dart';
 import '../widgets/tutor_card.dart';
@@ -130,9 +131,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// Logo pequeño a la izquierda; búsqueda a la derecha.
-/// (Se quitó la campana de notificaciones: no existe un sistema de
-/// notificaciones y siempre mostraba "No tienes notificaciones nuevas".)
+/// Logo pequeño a la izquierda; notificaciones (Fase 14.9) y búsqueda a la derecha.
 class _HomeHeader extends StatelessWidget {
   final VoidCallback onSearch;
 
@@ -144,6 +143,7 @@ class _HomeHeader extends StatelessWidget {
       children: [
         const AppLogo(size: 36, direction: Axis.horizontal),
         const Spacer(),
+        const NotificationBell(),
         // El IconButton tiene relleno interno; se corre a la derecha para
         // que el borde del ícono quede alineado con el contenido (20 px).
         Transform.translate(

@@ -17,6 +17,8 @@ class BookingStatusBadge extends StatelessWidget {
       BookingStatus.rechazada ||
       BookingStatus.cancelada =>
         (AppColors.errorLight, AppColors.error),
+      BookingStatus.pendienteConfirmacion => (AppColors.primaryLight, AppColors.primary),
+      BookingStatus.completada => (AppColors.primarySoft, AppColors.primary),
     };
 
     return Container(

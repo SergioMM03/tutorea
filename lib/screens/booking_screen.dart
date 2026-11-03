@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../domain/models/models.dart';
+import '../domain/repositories/repositories.dart';
 import '../routes/app_navigator.dart';
 import '../state/booking_store.dart';
 import '../state/session_store.dart';
@@ -9,6 +10,7 @@ import '../state/tutor_store.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../utils/formatters.dart';
+import '../utils/tutorea_time.dart';
 import '../widgets/app_back_button.dart';
 import '../widgets/bottom_action_bar.dart';
 import '../widgets/form_error_banner.dart';
@@ -41,17 +43,25 @@ class _BookingScreenState extends State<BookingScreen> {
   DateTime? _date;
   int? _startMinutes;
   int _duration = 60;
+  TutoringModality? _modality;
   final _topic = TextEditingController();
+  final _location = TextEditingController();
+
+  /// Modalidades que ofrece el tutor, en orden fijo.
+  List<TutoringModality> get _modalities =>
+      [for (final m in TutoringModality.values) if (_profile.ofrece(m)) m];
 
   TutorProfile get _profile => widget.tutor.profile;
 
   @override
   void initState() {
     super.initState();
-    final today = DateUtils.dateOnly(DateTime.now());
+    // Fechas y horas en hora de El Salvador (TutoreaTime).
+    final today = DateUtils.dateOnly(TutoreaTime.now());
     _dates = [for (var i = 1; i <= _daysShown; i++) today.add(Duration(days: i))];
 
     _subject = widget.tutor.subjects.isEmpty ? null : widget.tutor.subjects.first;
+    _modality = _modalities.firstOrNull;
     _date = _dates.where(_dayAvailable).firstOrNull;
     _startMinutes = _date == null ? null : _timesFor(_date!).firstOrNull;
 
@@ -63,6 +73,7 @@ class _BookingScreenState extends State<BookingScreen> {
   @override
   void dispose() {
     _topic.dispose();
+    _location.dispose();
     super.dispose();
   }
 
@@ -100,15 +111,18 @@ class _BookingScreenState extends State<BookingScreen> {
   String? _validate(SessionStore session) {
     final user = session.user;
     if (user == null) return 'Inicia sesión para solicitar una tutoría.';
-    if (!session.isStudent) return 'Solo los estudiantes pueden solicitar tutorías.';
+    if (_profile.userId == user.id) return selfBookingMessage;
     if (!_profile.activo) return 'Este tutor no está disponible por ahora.';
     if (_subject == null) return 'Elige una materia.';
     if (!_profile.ensenaMateria(_subject!.id)) return 'El tutor no imparte esa materia.';
+    if (_modality == null || !_profile.ofrece(_modality!)) {
+      return 'Elige una modalidad que el tutor ofrezca.';
+    }
     if (_date == null) return 'Elige una fecha.';
     if (_startMinutes == null) return 'Elige una hora.';
     if (!_durations.contains(_duration)) return 'Elige una duración válida.';
     final start = _at(_date!, _startMinutes!);
-    if (!start.isAfter(DateTime.now())) return 'Elige una fecha y hora futuras.';
+    if (!start.isAfter(TutoreaTime.now())) return 'Elige una fecha y hora futuras.';
     if (!_profile.disponibleEn(start, _duration)) {
       return 'El tutor no atiende en ese horario.';
     }
@@ -133,6 +147,8 @@ class _BookingScreenState extends State<BookingScreen> {
       tema: _topic.text.trim().isEmpty ? null : _topic.text.trim(),
       fechaHora: _at(_date!, _startMinutes!),
       duracion: _duration,
+      modalidad: _modality,
+      ubicacion: _location.text.trim().isEmpty ? null : _location.text.trim(),
     );
     if (!mounted || created == null) return; // el error del store se muestra arriba
 
@@ -184,6 +200,34 @@ class _BookingScreenState extends State<BookingScreen> {
                 textCapitalization: TextCapitalization.sentences,
                 decoration: const InputDecoration(
                   hintText: 'Ej. Distribuciones de probabilidad',
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              const _FieldLabel('Modalidad'),
+              Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.sm,
+                children: [
+                  for (final m in _modalities)
+                    SubjectChip(
+                      label: m.label,
+                      selected: _modality == m,
+                      onTap: () => setState(() => _modality = m),
+                    ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _FieldLabel(_modality == TutoringModality.virtual ? 'Enlace de la reunión' : 'Lugar',
+                  suffix: ' (opcional)'),
+              TextField(
+                key: const Key('booking-location'),
+                controller: _location,
+                maxLength: 300,
+                decoration: InputDecoration(
+                  counterText: '',
+                  hintText: _modality == TutoringModality.virtual
+                      ? 'Ej. enlace de Meet o Zoom'
+                      : 'Ej. Biblioteca, segundo piso',
                 ),
               ),
               const SizedBox(height: AppSpacing.md),

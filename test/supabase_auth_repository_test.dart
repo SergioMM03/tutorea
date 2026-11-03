@@ -8,6 +8,7 @@ import 'package:tutorea/data/local/local_seed.dart';
 import 'package:tutorea/data/supabase/auth_selection.dart';
 import 'package:tutorea/data/supabase/remote_auth_gateway.dart';
 import 'package:tutorea/data/supabase/remote_catalog.dart';
+import 'package:tutorea/data/supabase/remote_catalog_repositories.dart';
 import 'package:tutorea/data/supabase/supabase_auth_errors.dart';
 import 'package:tutorea/data/supabase/supabase_auth_repository.dart';
 import 'package:tutorea/data/supabase/supabase_bootstrap.dart';
@@ -20,22 +21,24 @@ import 'package:tutorea/state/session_store.dart';
 const _esenUuid = '11111111-1111-4111-8111-111111111111';
 String _careerUuid(String slug) => 'career-$slug';
 
+const _esenRow = {
+  'id': _esenUuid,
+  'slug': 'esen',
+  'name': 'Escuela Superior de Economía y Negocios (ESEN)',
+  'short_name': 'ESEN',
+  'country': 'El Salvador',
+  'is_active': true,
+};
+
 /// Catálogo remoto con el mismo contenido que el seed (supabase/seed.sql).
-class _FakeCatalog implements CatalogRowsSource {
+class _FakeCatalog implements CatalogRowsSource, UniversityListSource {
   int fetches = 0;
   @override
   Future<RemoteCatalogRows?> fetch(String universitySlug) async {
     fetches++;
     if (universitySlug != 'esen') return null;
     return RemoteCatalogRows(
-      university: {
-        'id': _esenUuid,
-        'slug': 'esen',
-        'name': 'Escuela Superior de Economía y Negocios (ESEN)',
-        'short_name': 'ESEN',
-        'country': 'El Salvador',
-        'is_active': true,
-      },
+      university: Map.of(_esenRow),
       careers: [
         for (final c in LocalSeed.careers)
           {'id': _careerUuid(c.id), 'university_id': _esenUuid, 'slug': c.id, 'name': c.nombre},
@@ -43,12 +46,23 @@ class _FakeCatalog implements CatalogRowsSource {
       subjects: const [],
     );
   }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchActiveUniversities() async => [Map.of(_esenRow)];
+
+  @override
+  Future<String?> universitySlugById(String universityUuid) async =>
+      universityUuid == _esenUuid ? 'esen' : null;
 }
 
-/// `profiles` y `public_profiles` simulados.
+/// `profiles` y `public_profiles` simulados. [update] imita RLS: solo la fila
+/// del usuario con sesión, solo las columnas permitidas, y career_name lo copia
+/// "la base" desde la carrera (trigger sync_profile_career).
 class _FakeProfiles implements RemoteProfileSource {
   final Map<String, Map<String, dynamic>> rows = {};
   Object? error;
+  String? sessionUserId;
+  Map<String, Object?>? lastUpdate;
 
   @override
   Future<Map<String, dynamic>?> ownProfile(String userId) async {
@@ -69,8 +83,30 @@ class _FakeProfiles implements RemoteProfileSource {
   }
 
   @override
-  Future<String?> universitySlugById(String universityUuid) async =>
-      universityUuid == _esenUuid ? 'esen' : null;
+  Future<Map<String, dynamic>?> updateOwnProfile({
+    required String userId,
+    required String fullName,
+    required String careerUuid,
+    required int academicYear,
+  }) async {
+    if (error != null) throw error!;
+    lastUpdate = {
+      'id': userId,
+      'full_name': fullName,
+      'career_id': careerUuid,
+      'academic_year': academicYear,
+    };
+    final row = rows[userId];
+    if (row == null || userId != sessionUserId) return null; // RLS: 0 filas
+    final career = LocalSeed.careers.where((c) => _careerUuid(c.id) == careerUuid).firstOrNull;
+    if (career == null) throw Exception('FK');
+    row
+      ..['full_name'] = fullName
+      ..['career_id'] = careerUuid
+      ..['career_name'] = career.nombre
+      ..['academic_year'] = academicYear;
+    return Map.of(row);
+  }
 }
 
 /// Supabase Auth simulado. Al registrar imita handle_new_user: crea el perfil
@@ -81,7 +117,6 @@ class _FakeGateway implements RemoteAuthGateway {
 
   final Map<String, (String, RemoteAuthUser)> accounts = {};
   final StreamController<RemoteAuthEvent> controller = StreamController.broadcast();
-  RemoteAuthUser? current;
   Object? signUpError;
   Object? signInError;
   Object? signOutError;
@@ -94,6 +129,13 @@ class _FakeGateway implements RemoteAuthGateway {
   int _next = 1;
 
   String _newId() => '00000000-0000-4000-8000-${(_next++).toString().padLeft(12, '0')}';
+
+  RemoteAuthUser? _current;
+  RemoteAuthUser? get current => _current;
+  set current(RemoteAuthUser? user) {
+    _current = user;
+    profiles.sessionUserId = user?.id;
+  }
 
   @override
   RemoteAuthUser? get currentUser => current;
@@ -178,6 +220,41 @@ class _LegacyUsers implements AuthRepository {
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }
 
+class _NoUniversities implements UniversityRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
+}
+
+class _NoSubjects implements SubjectRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
+}
+
+class _NoTutors implements TutorRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
+}
+
+class _NoBookings implements BookingRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
+}
+
+class _NoIncidents implements IncidentRepository, AdminIncidentRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
+}
+
+class _NoReviews implements ReviewRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
+}
+
+class _NoNotifications implements NotificationRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
+}
+
 void main() {
   late _FakeProfiles profiles;
   late _FakeGateway gateway;
@@ -188,7 +265,7 @@ void main() {
       SupabaseAuthRepository(
         gateway: gateway,
         profiles: profiles,
-        catalog: catalog,
+        catalog: RemoteCatalogCache(catalog: catalog, universities: catalog, timeout: timeout),
         legacyUsers: _LegacyUsers(),
         timeout: timeout,
         startupTimeout: timeout,
@@ -436,18 +513,106 @@ void main() {
       expect(await repo.getUserById(ana.id), isNull);
     });
 
-    test('editar el perfil queda para la Fase 14.6', () async {
-      await expectLater(
-        repo.updateProfile(userId: 'x', nombre: 'Ana', careerId: LocalSeed.eyn, carrera: 'x', anioAcademico: 1),
-        throwsA(isA<RepositoryException>().having((e) => e.message, 'message', contains('14.6'))),
-      );
-    });
 
     test('el catálogo remoto se consulta una sola vez', () async {
       await registerAna();
       await repo.logout();
       await repo.login(correo: 'ana@esen.edu.sv', password: 'clave123', universityId: 'esen');
       expect(catalog.fetches, 1);
+    });
+  });
+
+  group('actualización del perfil (Fase 14.6)', () {
+    Future<AppUser> update(AppUser user,
+            {String nombre = ' Ana María ', String careerId = LocalSeed.eyn, int anio = 3}) =>
+        repo.updateProfile(
+            userId: user.id, nombre: nombre, careerId: careerId, carrera: 'texto ignorado', anioAcademico: anio);
+
+    test('actualiza nombre, carrera y año del usuario con sesión', () async {
+      final ana = await registerAna();
+      final updated = await update(ana);
+
+      expect(updated.id, ana.id);
+      expect(updated.nombre, 'Ana María');
+      expect(updated.careerId, LocalSeed.eyn);
+      expect(updated.carrera, 'Licenciatura en Economía y Negocios'); // copiado por la base
+      expect(updated.anioAcademico, 3);
+      expect(updated.rol, ana.rol);
+      expect(updated.universityId, 'esen');
+      expect(updated.password, isEmpty);
+      // Solo se envían columnas editables, con la carrera en uuid.
+      expect(profiles.lastUpdate, {
+        'id': ana.id,
+        'full_name': 'Ana María',
+        'career_id': _careerUuid(LocalSeed.eyn),
+        'academic_year': 3,
+      });
+      // Queda guardado en "la base": al recuperar la sesión se ve el cambio.
+      expect((await build().currentSession()).usuario?.nombre, 'Ana María');
+    });
+
+    test('nunca modifica el perfil de otro usuario', () async {
+      final ana = await registerAna();
+      await repo.logout();
+      await repo.register(nombre: 'Beto', correo: 'beto@esen.edu.sv', password: 'clave123',
+          careerId: LocalSeed.eyn, carrera: 'x', anioAcademico: 1, rol: UserRole.estudiante);
+
+      await expectLater(update(ana),
+          throwsA(isA<RepositoryException>().having((e) => e.message, 'message', contains('propio perfil'))));
+      expect(profiles.lastUpdate, isNull);
+      expect(profiles.rows[ana.id]!['full_name'], 'Ana López');
+    });
+
+    test('si RLS no deja actualizar, informa el error', () async {
+      final ana = await registerAna();
+      profiles.sessionUserId = 'otro'; // la base no reconoce la sesión
+      await expectLater(update(ana), throwsA(isA<RepositoryException>()));
+    });
+
+    test('sin sesión no se puede editar', () async {
+      final ana = await registerAna();
+      await repo.logout();
+      await expectLater(update(ana),
+          throwsA(isA<RepositoryException>().having((e) => e.message, 'message', contains('Inicia sesión'))));
+    });
+
+    test('valida nombre, año y carrera de su universidad', () async {
+      final ana = await registerAna();
+      for (final call in [
+        () => update(ana, nombre: ' '),
+        () => update(ana, anio: 0),
+        () => update(ana, anio: 11),
+        () => update(ana, careerId: 'carrera-de-otra-u'),
+      ]) {
+        await expectLater(call(), throwsA(isA<RepositoryException>()));
+      }
+      expect(profiles.lastUpdate, isNull);
+    });
+
+    test('el rol y la universidad no se pueden cambiar desde la app', () async {
+      final ana = await registerAna(rol: UserRole.tutor);
+      final updated = await update(ana);
+      expect(updated.rol, UserRole.tutor);
+      expect(profiles.lastUpdate!.keys, isNot(contains('role')));
+      expect(profiles.lastUpdate!.keys, isNot(contains('university_id')));
+    });
+
+    test('errores de conexión al guardar', () async {
+      final ana = await registerAna();
+      profiles.error = AuthRetryableFetchException();
+      await expectLater(update(ana),
+          throwsA(isA<RepositoryException>().having((e) => e.message, 'message', connectionMessage)));
+    });
+
+    test('SessionStore.updateProfile con Supabase', () async {
+      final store = SessionStore(repo);
+      await store.register(nombre: 'Luis', correo: 'luis@esen.edu.sv', password: 'clave123',
+          careerId: LocalSeed.eyn, carrera: 'x', anioAcademico: 1, rol: UserRole.estudiante);
+      expect(await store.updateProfile(nombre: 'Luis Pérez', careerId: LocalSeed.software, anioAcademico: 2),
+          isTrue);
+      expect(store.user?.nombre, 'Luis Pérez');
+      expect(store.user?.careerId, LocalSeed.software);
+      store.dispose();
     });
   });
 
@@ -468,32 +633,46 @@ void main() {
     });
   });
 
-  group('selección del modo de autenticación', () {
-    final local = _LegacyUsers();
+  group('selección del modo', () {
+    final legacy = _LegacyUsers();
+    AppDataSources sources({required bool remote}) => AppDataSources(
+          auth: remote ? build() : legacy,
+          universities: _NoUniversities(),
+          subjects: _NoSubjects(),
+          tutors: _NoTutors(),
+          bookings: _NoBookings(),
+          incidents: _NoIncidents(),
+          adminIncidents: _NoIncidents(),
+          reviews: _NoReviews(),
+          notifications: _NoNotifications(),
+          remote: remote,
+        );
 
     test('local por defecto y si Supabase no está inicializado', () {
       expect(AuthMode.parse(''), AuthMode.local);
       expect(AuthMode.parse(' Supabase '), AuthMode.supabase);
       expect(AuthMode.fromEnvironment(), AuthMode.local);
-      AuthRepository remote() => throw StateError('no debe crearse');
-      expect(selectAuthRepository(mode: AuthMode.local, supabaseReady: true, local: local, remote: remote, log: (_) {}),
+      final local = sources(remote: false);
+      AppDataSources remote() => throw StateError('no debe crearse');
+      expect(selectDataSources(mode: AuthMode.local, supabaseReady: true, local: local, remote: remote, log: (_) {}),
           same(local));
-      expect(selectAuthRepository(mode: AuthMode.supabase, supabaseReady: false, local: local, remote: remote, log: (_) {}),
+      expect(selectDataSources(mode: AuthMode.supabase, supabaseReady: false, local: local, remote: remote, log: (_) {}),
           same(local));
     });
 
-    test('si no se puede crear el repositorio remoto, sigue en local', () {
+    test('si no se pueden crear los repositorios remotos, sigue en local', () {
+      final local = sources(remote: false);
       expect(
-        selectAuthRepository(mode: AuthMode.supabase, supabaseReady: true, local: local,
+        selectDataSources(mode: AuthMode.supabase, supabaseReady: true, local: local,
             remote: () => throw StateError('x'), log: (_) {}),
         same(local),
       );
-      final remote = build();
-      expect(selectAuthRepository(mode: AuthMode.supabase, supabaseReady: true, local: local,
+      final remote = sources(remote: true);
+      expect(selectDataSources(mode: AuthMode.supabase, supabaseReady: true, local: local,
           remote: () => remote, log: (_) {}), same(remote));
     });
 
-    test('Supabase no inicializado: no se crea el repositorio remoto', () {
+    test('Supabase no inicializado: no se crean los repositorios remotos', () {
       SupabaseBootstrap.resetForTesting();
       expect(() => SupabaseAuthRepository.fromInitializedClient(), throwsStateError);
     });

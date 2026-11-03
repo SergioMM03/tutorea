@@ -12,6 +12,7 @@ import '../widgets/rating_label.dart';
 import '../widgets/section_title.dart';
 import '../widgets/subject_chip.dart';
 import '../widgets/tutor_avatar.dart';
+import '../widgets/tutor_reviews_section.dart';
 
 /// 4. Perfil del tutor. Recibe el [TutorSummary] real (perfil + cuenta + materias).
 class TutorProfileScreen extends StatelessWidget {
@@ -72,6 +73,9 @@ class TutorProfileScreen extends StatelessWidget {
                     _DayCircle(label: Formatters.weekdayShortOf(day)),
                 ],
               ),
+              const SizedBox(height: AppSpacing.lg),
+              // Fase 14.9: reseñas públicas (sin datos de quién calificó).
+              TutorReviewsSection(tutorId: tutor.id),
             ],
           ),
         ),
@@ -109,7 +113,7 @@ class _ProfileHeader extends StatelessWidget {
         // El MVP no guarda "Tutor/Tutora": se muestra la carrera del tutor.
         Text(tutor.user.carrera, textAlign: TextAlign.center, style: textTheme.bodyLarge),
         const SizedBox(height: AppSpacing.xs),
-        RatingLabel(rating: tutor.rating, large: true),
+        RatingLabel(rating: tutor.calificacion, count: tutor.totalResenas, large: true),
       ],
     );
   }

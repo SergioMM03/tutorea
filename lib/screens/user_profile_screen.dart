@@ -12,7 +12,9 @@ import '../widgets/secondary_button.dart';
 import '../widgets/section_title.dart';
 import '../widgets/tutor_avatar.dart';
 
-/// Perfil del estudiante que inició sesión (datos de SessionStore).
+/// Perfil de la cuenta en el modo estudiante (datos de SessionStore).
+/// Cualquier cuenta puede también ofrecer tutorías: «Ofrecer tutorías» abre el
+/// espacio de tutor (Dashboard), donde se crea o edita el perfil de tutor.
 class UserProfileScreen extends StatefulWidget {
   const UserProfileScreen({super.key});
 
@@ -85,6 +87,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 label: 'Mis reservas',
                 onTap: () => AppNavigator.toMyBookings(context),
               ),
+              const SizedBox(height: AppSpacing.sm),
+              _MenuTile(
+                key: const Key('to-tutor-space'),
+                icon: Icons.school_outlined,
+                label: 'Ofrecer tutorías',
+                onTap: () => AppNavigator.toTutorDashboard(context),
+              ),
               const SizedBox(height: AppSpacing.xl),
               SecondaryButton(
                 label: 'Cerrar sesión',
@@ -149,7 +158,7 @@ class _MenuTile extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
 
-  const _MenuTile({required this.icon, required this.label, required this.onTap});
+  const _MenuTile({super.key, required this.icon, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {

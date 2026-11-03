@@ -20,6 +20,10 @@ class TutorSummary {
   String get nombre => user.nombre;
   double get precioHora => profile.precioHora;
   double get rating => profile.rating;
+
+  /// Promedio para mostrar, o null si es «Nuevo» (sin reseñas).
+  double? get calificacion => profile.calificacion;
+  int get totalResenas => profile.totalResenas;
 }
 
 /// Tutores: lista para estudiantes y perfil propio para tutores.
@@ -46,6 +50,9 @@ class TutorStore extends ChangeNotifier {
   String _query = '';
   String? _careerFilter;
   List<Career> _careers = const [];
+  TutoringModality? _modalityFilter;
+  DateTime? _availableAt;
+  int _availableMinutes = 60;
 
   /// Todos los tutores ya resueltos, por id de perfil (aunque no pasen el
   /// filtro actual). Lo usan Mis reservas y el detalle de una reserva.
@@ -76,6 +83,12 @@ class TutorStore extends ChangeNotifier {
   /// Career.id elegido en el filtro de carrera (null = todas).
   String? get careerFilter => _careerFilter;
 
+  /// Modalidad elegida (null = cualquiera).
+  TutoringModality? get modalityFilter => _modalityFilter;
+
+  /// Fecha y hora en que el tutor debe estar disponible (null = cualquiera).
+  DateTime? get availabilityFilter => _availableAt;
+
   /// Carreras de la universidad actual que tienen materias propias en el
   /// catálogo (solo esas se pueden usar como filtro).
   List<Career> get careers => _careers
@@ -87,7 +100,9 @@ class TutorStore extends ChangeNotifier {
       _query.trim().isNotEmpty ||
       _careerFilter != null ||
       _categoryFilter != null ||
-      _subjectFilter != null;
+      _subjectFilter != null ||
+      _modalityFilter != null ||
+      _availableAt != null;
 
   /// Tutores disponibles que coinciden con el texto y la carrera.
   /// (Universidad y categoría ya vienen filtradas en [availableTutors].)
@@ -121,6 +136,8 @@ class TutorStore extends ChangeNotifier {
       _subjectFilter = null;
       _categoryFilter = null;
       _careerFilter = null;
+      _modalityFilter = null;
+      _availableAt = null;
       _query = '';
     }
     return loadAvailable();
@@ -134,11 +151,7 @@ class TutorStore extends ChangeNotifier {
         if (_careers.isEmpty && universities != null && universityId != null) {
           _careers = await universities.getCareers(universityId);
         }
-        final profiles = await _tutors.getAvailable(
-          universityId: _universityId,
-          subjectId: _subjectFilter,
-          categoria: _categoryFilter,
-        );
+        final profiles = await _queryAvailable();
         _available = await _summaries(profiles);
       });
 
@@ -153,6 +166,20 @@ class TutorStore extends ChangeNotifier {
   Future<void> filterByCategory(String? categoria) {
     _categoryFilter = categoria;
     _subjectFilter = null;
+    return loadAvailable();
+  }
+
+  /// Filtra por modalidad (null = cualquiera).
+  Future<void> filterByModality(TutoringModality? modalidad) {
+    _modalityFilter = modalidad;
+    return loadAvailable();
+  }
+
+  /// Filtra por disponibilidad: tutores que atienden una sesión de
+  /// [duracionMinutos] que empieza en [inicio] (null = cualquier horario).
+  Future<void> filterByAvailability(DateTime? inicio, {int duracionMinutos = 60}) {
+    _availableAt = inicio;
+    _availableMinutes = duracionMinutos;
     return loadAvailable();
   }
 
@@ -176,6 +203,8 @@ class TutorStore extends ChangeNotifier {
     _careerFilter = null;
     _categoryFilter = null;
     _subjectFilter = null;
+    _modalityFilter = null;
+    _availableAt = null;
     return loadAvailable();
   }
 
@@ -207,6 +236,22 @@ class TutorStore extends ChangeNotifier {
     return list.isEmpty ? null : list.first;
   }
 
+  /// Vuelve a leer un tutor (p. ej. después de calificarlo: el promedio y el
+  /// total los recalcula el servidor o el repositorio local).
+  Future<void> refreshTutor(String tutorId) async {
+    try {
+      final profile = await _tutors.getById(tutorId);
+      if (profile == null) return;
+      final list = await _summaries([profile]);
+      if (list.isEmpty) return;
+      _available = [for (final t in _available) t.id == tutorId ? list.first : t];
+      if (_myProfile?.id == tutorId) _myProfile = profile;
+      notifyListeners();
+    } catch (_) {
+      // Sin red: se mantiene lo que ya se mostraba.
+    }
+  }
+
   // ---------------- Tutor ----------------
 
   /// Carga el perfil del tutor que inició sesión.
@@ -219,11 +264,7 @@ class TutorStore extends ChangeNotifier {
   Future<bool> saveProfile(TutorProfile profile) => _run(() async {
         _myProfile = await _tutors.save(profile);
         // La lista de estudiantes puede cambiar (precio, materias, activo).
-        final profiles = await _tutors.getAvailable(
-          universityId: _universityId,
-          subjectId: _subjectFilter,
-          categoria: _categoryFilter,
-        );
+        final profiles = await _queryAvailable();
         _available = await _summaries(profiles);
       });
 
@@ -267,6 +308,8 @@ class TutorStore extends ChangeNotifier {
     _subjectFilter = null;
     _categoryFilter = null;
     _careerFilter = null;
+    _modalityFilter = null;
+    _availableAt = null;
     _careers = const [];
     _known.clear();
     _query = '';
@@ -281,6 +324,15 @@ class TutorStore extends ChangeNotifier {
   }
 
   // ---------------- Interno ----------------
+
+  Future<List<TutorProfile>> _queryAvailable() => _tutors.getAvailable(
+        universityId: _universityId,
+        subjectId: _subjectFilter,
+        categoria: _categoryFilter,
+        modalidad: _modalityFilter,
+        disponibleEn: _availableAt,
+        duracionMinutos: _availableMinutes,
+      );
 
   /// Minúsculas y sin tildes: "Estadística" → "estadistica".
   static String _normalize(String text) {

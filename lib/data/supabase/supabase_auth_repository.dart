@@ -2,9 +2,10 @@ import '../../domain/models/models.dart';
 import '../../domain/repositories/repositories.dart';
 import 'remote_auth_gateway.dart';
 import 'remote_catalog.dart';
+import 'remote_catalog_repositories.dart';
 import 'supabase_auth_errors.dart';
 
-/// AuthRepository con Supabase Auth (Fase 14.5).
+/// AuthRepository con Supabase Auth (Fase 14.5) y perfiles en `profiles` (Fase 14.6).
 ///
 /// Cómo encaja con el esquema (migraciones 06 y 08):
 /// - El registro llama a `auth.signUp` con metadata: university_id, career_id
@@ -15,7 +16,10 @@ import 'supabase_auth_errors.dart';
 ///   valor) y el trigger convierte cualquier otro valor en 'estudiante'. El rol
 ///   que usa la app siempre se lee de `profiles`, nunca de la metadata.
 /// - Los ids de Flutter (slug) se traducen a uuid con el catálogo remoto
-///   (decisión 17).
+///   (decisión 17), compartido con los repositorios de catálogo.
+/// - [updateProfile] solo cambia nombre, carrera y año del usuario con sesión;
+///   RLS, los permisos de columna y el trigger de guarda lo garantizan también
+///   en la base.
 ///
 /// Transición: el resto de la app (tutores, reservas, catálogo) sigue siendo
 /// local. Para que los tutores del seed local sigan mostrando su nombre,
@@ -23,18 +27,15 @@ import 'supabase_auth_errors.dart';
 class SupabaseAuthRepository implements AuthRepository, AuthSessionChanges {
   final RemoteAuthGateway _gateway;
   final RemoteProfileSource _profiles;
-  final CatalogRowsSource _catalog;
+  final RemoteCatalogCache _catalog;
   final AuthRepository? _legacyUsers;
   final Duration _timeout;
   final Duration _startupTimeout;
 
-  final Map<String, RemoteCatalog> _catalogBySlug = {};
-  final Map<String, String> _slugByUniversityUuid = {};
-
   SupabaseAuthRepository({
     required RemoteAuthGateway gateway,
     required RemoteProfileSource profiles,
-    required CatalogRowsSource catalog,
+    required RemoteCatalogCache catalog,
     AuthRepository? legacyUsers,
     Duration timeout = const Duration(seconds: 15),
     Duration startupTimeout = const Duration(seconds: 5),
@@ -46,12 +47,16 @@ class SupabaseAuthRepository implements AuthRepository, AuthSessionChanges {
         _startupTimeout = startupTimeout;
 
   /// Con el cliente global. Lanza StateError si Supabase no está inicializado.
-  factory SupabaseAuthRepository.fromInitializedClient({AuthRepository? legacyUsers}) {
+  factory SupabaseAuthRepository.fromInitializedClient({
+    AuthRepository? legacyUsers,
+    RemoteCatalogCache? catalog,
+  }) {
     final client = initializedSupabaseClient();
+    final source = SupabaseCatalogSource(client);
     return SupabaseAuthRepository(
       gateway: SupabaseAuthGateway(client.auth),
       profiles: SupabaseProfileSource(client),
-      catalog: SupabaseCatalogSource(client),
+      catalog: catalog ?? RemoteCatalogCache(catalog: source, universities: source),
       legacyUsers: legacyUsers,
     );
   }
@@ -75,25 +80,19 @@ class SupabaseAuthRepository implements AuthRepository, AuthSessionChanges {
     required UserRole rol,
   }) async {
     final email = _normalize(correo);
-    final name = nombre.trim();
     // Mismas reglas que LocalAuthRepository y handle_new_user, antes de llamar
     // al servidor (Supabase Auth no devuelve el motivo exacto del trigger).
-    if (name.length < 2) throw const RepositoryException('Escribe tu nombre.');
+    final name = _validName(nombre);
     if (!email.contains('@') || !email.contains('.')) {
       throw const RepositoryException(invalidEmailMessage);
     }
     if (password.length < 6) {
       throw const RepositoryException('La contraseña debe tener al menos 6 caracteres.');
     }
-    if (anioAcademico < 1 || anioAcademico > 10) {
-      throw const RepositoryException('El año académico no es válido.');
-    }
+    _validYear(anioAcademico);
 
     final catalog = await _guard(() => _catalogFor(universityId));
-    final careerUuid = catalog.careerUuidBySlug[careerId];
-    if (careerUuid == null) {
-      throw const RepositoryException('Elige una carrera de tu universidad.');
-    }
+    final careerUuid = _careerUuid(catalog, careerId);
 
     final result = await _guard(() => _gateway.signUp(
           email: email,
@@ -174,7 +173,10 @@ class SupabaseAuthRepository implements AuthRepository, AuthSessionChanges {
 
   // ---------------------------------------------------------------- perfiles
 
-  /// La edición del perfil en Supabase corresponde a la Fase 14.6.
+  /// Actualiza nombre, carrera y año del usuario CON SESIÓN. Nunca otro perfil:
+  /// [userId] debe ser el de la sesión (y RLS lo exige también). La carrera debe
+  /// ser de la universidad de la cuenta; [carrera] (texto) se ignora porque la
+  /// base copia el nombre desde la carrera elegida.
   @override
   Future<AppUser> updateProfile({
     required String userId,
@@ -183,8 +185,31 @@ class SupabaseAuthRepository implements AuthRepository, AuthSessionChanges {
     required String carrera,
     required int anioAcademico,
   }) async {
-    throw const RepositoryException(
-        'Editar el perfil con Supabase todavía no está disponible (Fase 14.6).');
+    final current = _gateway.currentUser;
+    if (current == null) {
+      throw const RepositoryException('Inicia sesión para editar tu perfil.');
+    }
+    if (current.id != userId) {
+      throw const RepositoryException('Solo puedes editar tu propio perfil.');
+    }
+    final name = _validName(nombre);
+    _validYear(anioAcademico);
+
+    final own = await _guard(() => _profiles.ownProfile(current.id));
+    if (own == null) throw const RepositoryException(profileReadMessage);
+    final catalog = await _guard(() => _catalogForUuid(_text(own, 'university_id')));
+    final careerUuid = _careerUuid(catalog, careerId);
+
+    final updated = await _guard(() => _profiles.updateOwnProfile(
+          userId: current.id,
+          fullName: name,
+          careerUuid: careerUuid,
+          academicYear: anioAcademico,
+        ));
+    if (updated == null) {
+      throw const RepositoryException('No se pudo guardar tu perfil. Intenta de nuevo.');
+    }
+    return _guard(() => _userFromRow(current, updated));
   }
 
   /// Cuenta por id. Ids que no son uuid (cuentas del seed local) se buscan en
@@ -229,6 +254,12 @@ class SupabaseAuthRepository implements AuthRepository, AuthSessionChanges {
     if (row == null) {
       throw const RepositoryException('Tu cuenta no tiene perfil. Contacta al equipo de Tutorea.');
     }
+    return _userFromRow(remoteUser, row);
+  }
+
+  /// Fila de `profiles` → AppUser. El rol siempre sale de la base.
+  Future<AppUser> _userFromRow(RemoteAuthUser remoteUser, Map<String, dynamic> row) async {
+    if (row['id'] != remoteUser.id) throw const RepositoryException(profileReadMessage);
     final roleText = row['role'];
     final role = _role(roleText);
     if (role == null) {
@@ -257,26 +288,35 @@ class SupabaseAuthRepository implements AuthRepository, AuthSessionChanges {
   }
 
   Future<RemoteCatalog> _catalogFor(String universitySlug) async {
-    final cached = _catalogBySlug[universitySlug];
-    if (cached != null) return cached;
-    final rows = await _catalog.fetch(universitySlug);
-    if (rows == null) throw const RepositoryException('Esa universidad no está disponible.');
-    final RemoteCatalog catalog;
-    try {
-      catalog = CatalogMapper.map(rows);
-    } on CatalogMappingException {
-      throw const RepositoryException('No se pudo leer el catálogo de tu universidad.');
-    }
-    _catalogBySlug[universitySlug] = catalog;
-    _slugByUniversityUuid[catalog.universityUuid] = universitySlug;
+    final catalog = await _catalog.bySlug(universitySlug);
+    if (catalog == null) throw const RepositoryException('Esa universidad no está disponible.');
     return catalog;
   }
 
   Future<RemoteCatalog> _catalogForUuid(String universityUuid) async {
-    final slug = _slugByUniversityUuid[universityUuid] ??
-        await _profiles.universitySlugById(universityUuid);
-    if (slug == null) throw const RepositoryException('Tu universidad no está disponible.');
-    return _catalogFor(slug);
+    final catalog = await _catalog.byUuid(universityUuid);
+    if (catalog == null) throw const RepositoryException('Tu universidad no está disponible.');
+    return catalog;
+  }
+
+  static String _careerUuid(RemoteCatalog catalog, String careerId) {
+    final uuid = catalog.careerUuidBySlug[careerId];
+    if (uuid == null) throw const RepositoryException('Elige una carrera de tu universidad.');
+    return uuid;
+  }
+
+  static String _validName(String nombre) {
+    final name = nombre.trim();
+    if (name.length < 2 || name.length > 120) {
+      throw const RepositoryException('Escribe tu nombre (2 a 120 caracteres).');
+    }
+    return name;
+  }
+
+  static void _validYear(int anioAcademico) {
+    if (anioAcademico < 1 || anioAcademico > 10) {
+      throw const RepositoryException('El año académico no es válido.');
+    }
   }
 
   /// Ejecuta una llamada remota con tiempo límite y errores traducidos.

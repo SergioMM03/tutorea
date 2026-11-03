@@ -1,4 +1,5 @@
 import '../../domain/models/models.dart';
+import '../../domain/tutor_rules.dart';
 import '../../domain/repositories/repositories.dart';
 import 'local_database.dart';
 
@@ -15,6 +16,9 @@ class LocalTutorRepository implements TutorRepository {
     String? universityId,
     String? subjectId,
     String? categoria,
+    TutoringModality? modalidad,
+    DateTime? disponibleEn,
+    int duracionMinutos = 60,
   }) async {
     // Ids de las materias de esa categoría (si se filtra por categoría).
     final Set<String>? categoryIds = categoria == null
@@ -26,14 +30,15 @@ class LocalTutorRepository implements TutorRepository {
             .map((s) => s.id)
             .toSet();
 
-    return _profiles().where((p) {
-      if (!p.activo || !p.completo) return false;
-      if (universityId != null && p.universityId != universityId) return false;
-      if (subjectId != null && !p.ensenaMateria(subjectId)) return false;
-      if (categoryIds != null && !p.materias.any(categoryIds.contains)) return false;
-      return true;
-    }).toList()
-      ..sort((a, b) => b.rating.compareTo(a.rating));
+    return TutorRules.visible(
+      _profiles(),
+      universityId: universityId,
+      subjectId: subjectId,
+      categorySubjectIds: categoryIds,
+      modalidad: modalidad,
+      disponibleEn: disponibleEn,
+      duracionMinutos: duracionMinutos,
+    );
   }
 
   @override
@@ -54,22 +59,28 @@ class LocalTutorRepository implements TutorRepository {
 
   @override
   Future<TutorProfile> save(TutorProfile profile) async {
-    if (profile.precioHora < 0) {
-      throw const RepositoryException('El precio no puede ser negativo.');
-    }
+    TutorRules.validateForSave(profile);
     final profiles = _profiles();
     final other = profiles.where((p) => p.userId == profile.userId && p.id != profile.id);
     if (other.isNotEmpty) {
       throw const RepositoryException('Este usuario ya tiene un perfil de tutor.');
     }
     final index = profiles.indexWhere((p) => p.id == profile.id);
+    // La calificación no la decide quien guarda el perfil: se conserva la
+    // calculada a partir de las reseñas (igual que en el servidor). Un perfil
+    // nuevo empieza sin reseñas.
+    final stored = index >= 0 ? profiles[index] : null;
+    final saved = profile.copyWith(
+      rating: stored?.rating ?? 0,
+      totalResenas: stored?.totalResenas ?? 0,
+    );
     if (index >= 0) {
-      profiles[index] = profile;
+      profiles[index] = saved;
     } else {
-      profiles.add(profile);
+      profiles.add(saved);
     }
     await _db.writeList(
         LocalDatabase.tutorProfiles, profiles.map((p) => p.toJson()).toList());
-    return profile;
+    return saved;
   }
 }

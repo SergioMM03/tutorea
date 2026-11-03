@@ -1,10 +1,12 @@
-# Tutorea · Supabase (Fase 14.2: esquema base)
+# Tutorea · Supabase (esquema base 14.2 y tutores 14.7)
 
 Esquema base de la migración a Supabase según el documento
 «Tutorea — Fase 14.1 Arquitectura y base de datos Supabase».
 
 ```
-migrations/   11 migraciones en orden (extensiones → políticas RLS)
+migrations/   01–11 esquema base (14.2); 12–15 tutores, materias, disponibilidad y save_tutor_profile (14.7);
+              16 doble rol: cualquier cuenta puede tener perfil de tutor (corrección 14.7);
+              17–18 reservas: tabla bookings y funciones request/accept/reject/cancel (14.8)
 seed.sql      catálogo inicial: ESEN, 4 carreras, 13 materias (repetible)
 tests/        pruebas pgTAP (supabase test db)
 scripts/      comprobación de que el seed se puede ejecutar varias veces
@@ -61,6 +63,86 @@ supabase db push --include-seed
 
 El seed se puede volver a ejecutar sin duplicar datos.
 
+### Fase 14.7: desplegar tutores y disponibilidad
+
+Las migraciones 12 a 15 se agregan sin tocar las anteriores. Después de probarlas en local
+(`supabase db reset` y `supabase test db`, que incluye `tests/05_tutors.test.sql`):
+
+```
+supabase db push --dry-run     # debe listar solo 20261102000012 … 20261102000015
+supabase db push
+```
+
+- `tutor_profiles`: un perfil por cuenta con rol tutor; el servidor fija dueño y universidad.
+- `tutor_subjects`: materias del tutor, siempre de su misma universidad (FK compuesta).
+- `availability_slots`: días 1–7, minutos 0–1440, sin cruces (restricción EXCLUDE).
+- `save_tutor_profile(...)`: guarda perfil, materias y horarios en una transacción, con RLS.
+
+### Corrección 14.7: doble rol (migración 16)
+
+Una misma cuenta puede ser estudiante y tutor. Ofrecer tutorías = tener una fila en
+`tutor_profiles`; `profiles.role` solo es el rol principal (pantalla inicial) o
+`administrador`. La migración 16 reemplaza `prepare_tutor_profile` (cualquier cuenta
+estudiante o tutor crea su perfil; una administradora no) y `assign_admin` (rechaza
+cuentas que ya ofrecen tutorías). No modifica las migraciones 01–15.
+
+```
+supabase db reset && supabase test db   # incluye tests/06_dual_role.test.sql
+supabase db push --dry-run              # debe listar solo 20261102000016 (si 12–15 ya están)
+supabase db push
+```
+
+### Fase 14.8: reservas (migraciones 17 y 18)
+
+- `bookings` (17): reserva entre la cuenta que solicita y un perfil de tutor de la misma
+  universidad (FK compuestas). Precio acordado fijo, `starts_at`/`ends_at` en `timestamptz`
+  (UTC), duración 60/90/120, modalidad, lugar o enlace, estado y datos de cancelación.
+  Dos `EXCLUDE` impiden sesiones confirmadas que se crucen (por tutor y por estudiante).
+  La guarda `bookings_guard` protege transiciones y campos; las reservas no se borran.
+  RLS: solo lectura para las dos partes. Se agrega a la publicación `supabase_realtime`.
+- Funciones (18), `SECURITY DEFINER` con `search_path = ''`: `request_booking`,
+  `accept_booking`, `reject_booking`, `cancel_booking`. Toman la identidad de `auth.uid()`;
+  la disponibilidad se compara en hora de El Salvador (`tutorea_time_zone()`) al solicitar
+  y otra vez al aceptar (con la disponibilidad actual, bloqueando los horarios del tutor:
+  si la cambió o la borró, `TU015`).
+
+```
+supabase db reset && supabase test db   # incluye tests/07_bookings y 08_booking_availability
+supabase db push --dry-run              # debe listar solo 20261102000017 y 20261102000018
+```
+
+Después del despliegue, comprobar en el panel (Database → Publications → supabase_realtime)
+que `bookings` aparece; si no, activar Realtime para esa tabla.
+
+### Fase 14.9: confirmaciones, incidencias, calificaciones y notificaciones (migraciones 19 a 23)
+
+No modifican las migraciones 01–18. Toda escritura pasa por funciones `SECURITY DEFINER`
+con `search_path = ''` que toman la identidad de `auth.uid()`; las tablas son de solo
+lectura para `authenticated` (RLS) y el historial no se modifica ni se borra.
+
+- `booking_confirmations` (19): una confirmación por parte (`estudiante` / `tutor`) y reserva.
+- `booking_incidents` y `booking_incident_events` (20): `report_incident` (partes, desde
+  `aceptada` hasta 7 días después de `ends_at`, una abierta por persona). Gestión del
+  administrador de la misma universidad (`is_admin_of`): `admin_start_incident_investigation`,
+  `admin_add_incident_note` (nota interna), `admin_resolve_incident`, `admin_dismiss_incident`.
+  Resolver o desestimar no cambia la reserva, no crea calificaciones ni sanciona.
+- `confirm_booking` (21): 1.ª confirmación → `pendiente_confirmacion`; 2.ª → `completada`,
+  salvo incidencia abierta (`TU022`). Nunca se completa por tiempo.
+- `reviews` y vista `public_reviews` (22): `submit_review` (solo el estudiante, reserva
+  completada y sin incidencias abiertas, 1–5, una por reserva, sin edición). El trigger
+  `recalc_tutor_rating` calcula `rating_avg`/`rating_count`; sin reseñas, `rating_avg` es null.
+- `notifications` (23): las crean triggers sobre `bookings` y `booking_incidents` (sin
+  duplicados: `event_key` único por destinatario). La app solo lee las propias y las marca
+  con `mark_notifications_read`. Se agrega a `supabase_realtime`.
+
+```
+supabase db reset && supabase test db   # incluye tests/09 a 12
+supabase db push --dry-run              # debe listar solo 20261102000019 … 20261102000023
+```
+
+Después del despliegue, comprobar que `notifications` está en la publicación
+`supabase_realtime`.
+
 ## 4. Registro (metadata que exige handle_new_user)
 
 `signUp` / `auth.admin.createUser` deben enviar en `data` / `user_metadata`:
@@ -71,7 +153,7 @@ El seed se puede volver a ejecutar sin duplicar datos.
 | `career_id` | uuid de una carrera de esa universidad (obligatoria) |
 | `full_name` | 2 a 120 caracteres |
 | `academic_year` | 1 a 10 |
-| `role` | `estudiante` o `tutor`; cualquier otro valor se guarda como `estudiante` |
+| `role` | rol principal: `estudiante` o `tutor`; cualquier otro valor se guarda como `estudiante`. Ofrecer tutorías no depende del rol |
 
 Flutter conserva sus ids actuales (`esen`, `esen-eyn`, `est`…). Los repositorios de
 Supabase los traducen a uuid buscando por `slug` (universities, careers, subjects).
@@ -81,7 +163,8 @@ debe validar antes de llamar a `signUp`.
 
 ## 5. Crear un administrador
 
-Los administradores son **cuentas independientes**: no se promueve a un tutor existente.
+Los administradores son **cuentas independientes**: no se promueve a una cuenta con rol
+tutor ni a una que tenga perfil de tutor.
 
 1. Crear la cuenta con rol estudiante y metadata válida (sección 4), de una de dos formas:
    - registro normal en la app, o

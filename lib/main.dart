@@ -4,12 +4,13 @@ import 'package:flutter/services.dart';
 import 'config/auth_mode.dart';
 import 'data/local/local_repositories.dart';
 import 'data/supabase/auth_selection.dart';
-import 'data/supabase/supabase_auth_repository.dart';
+import 'data/supabase/supabase_data_sources.dart';
 import 'data/supabase/supabase_bootstrap.dart';
 import 'routes/app_navigator.dart';
 import 'routes/routes.dart';
 import 'state/app_providers.dart';
 import 'theme/app_theme.dart';
+import 'widgets/booking_notice_listener.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,23 +23,31 @@ Future<void> main() async {
   // locales. Si no hay configuración o falla, la app arranca igual que antes.
   await SupabaseBootstrap.initializeIfConfigured();
 
-  // Fase 14.5: con TUTOREA_AUTH=supabase (y Supabase inicializado) las cuentas y
-  // la sesión usan Supabase Auth; si no, la autenticación local de siempre.
-  final auth = selectAuthRepository(
+  // Fases 14.5 a 14.8: con TUTOREA_AUTH=supabase (y Supabase inicializado),
+  // cuentas, perfiles, catálogo, tutores, disponibilidad y reservas usan
+  // Supabase; si no, los repositorios locales.
+  final data = selectDataSources(
     mode: AuthMode.fromEnvironment(),
     supabaseReady: SupabaseBootstrap.isReady,
-    local: repositories.auth,
-    remote: () => SupabaseAuthRepository.fromInitializedClient(legacyUsers: repositories.auth),
+    local: localDataSources(repositories),
+    remote: () => supabaseDataSources(repositories),
   );
 
   // Con sesión guardada abre directo en la pantalla de su rol;
   // sin sesión, en la selección de universidad.
-  final session = await auth.currentSession();
+  final session = await data.auth.currentSession();
   final initialRoute = AppNavigator.initialRouteFor(session);
 
   runApp(AppProviders.local(
     repositories,
-    auth: auth,
+    auth: data.auth,
+    universities: data.universities,
+    subjects: data.subjects,
+    tutors: data.tutors,
+    bookings: data.bookings,
+    incidents: data.incidents,
+    reviews: data.reviews,
+    notifications: data.notifications,
     child: TutoreaApp(initialRoute: initialRoute),
   ));
 }
@@ -78,7 +87,8 @@ class TutoreaApp extends StatelessWidget {
             // Tocar fuera de un campo de texto cierra el teclado.
             child: GestureDetector(
               onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-              child: child!,
+              // Avisos de reservas que cambió la otra parte (Fase 14.8).
+              child: BookingNoticeListener(child: child!),
             ),
           ),
         );

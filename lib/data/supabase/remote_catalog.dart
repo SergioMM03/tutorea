@@ -34,9 +34,19 @@ abstract class CatalogRowsSource {
   Future<RemoteCatalogRows?> fetch(String universitySlug);
 }
 
+/// Universidades visibles (Fase 14.6). RLS: anon y authenticated ven las
+/// activas; un usuario también ve la suya aunque se desactive.
+abstract class UniversityListSource {
+  /// Filas de `universities` activas, ordenadas por nombre.
+  Future<List<Map<String, dynamic>>> fetchActiveUniversities();
+
+  /// slug de una universidad a partir de su uuid, o null si no es visible.
+  Future<String?> universitySlugById(String universityUuid);
+}
+
 /// Consultas reales a Supabase (rol anon: RLS deja leer el catálogo de
 /// universidades activas sin iniciar sesión).
-class SupabaseCatalogSource implements CatalogRowsSource {
+class SupabaseCatalogSource implements CatalogRowsSource, UniversityListSource {
   final SupabaseClient _client;
   final Duration timeout;
 
@@ -81,6 +91,26 @@ class SupabaseCatalogSource implements CatalogRowsSource {
 
     return RemoteCatalogRows(university: university, careers: careers, subjects: subjects);
   }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchActiveUniversities() => _client
+      .from('universities')
+      .select('id, slug, name, short_name, country, is_active')
+      .eq('is_active', true)
+      .order('name')
+      .timeout(timeout);
+
+  @override
+  Future<String?> universitySlugById(String universityUuid) async {
+    final row = await _client
+        .from('universities')
+        .select('slug')
+        .eq('id', universityUuid)
+        .maybeSingle()
+        .timeout(timeout);
+    final slug = row?['slug'];
+    return slug is String ? slug : null;
+  }
 }
 
 /// Una fila no tiene la forma que exige el esquema.
@@ -119,17 +149,19 @@ class RemoteCatalog {
 class CatalogMapper {
   CatalogMapper._();
 
+  /// Fila de `universities` → University (id = slug).
+  static University university(Map<String, dynamic> u) => University(
+        id: _text(u, 'slug', 'universities'),
+        nombre: _text(u, 'name', 'universities'),
+        pais: _text(u, 'country', 'universities'),
+        activo: _bool(u, 'is_active', 'universities'),
+      );
+
   static RemoteCatalog map(RemoteCatalogRows rows) {
     final u = rows.university;
     final universityUuid = _text(u, 'id', 'universities');
-    final universitySlug = _text(u, 'slug', 'universities');
-
-    final university = University(
-      id: universitySlug,
-      nombre: _text(u, 'name', 'universities'),
-      pais: _text(u, 'country', 'universities'),
-      activo: _bool(u, 'is_active', 'universities'),
-    );
+    final university = CatalogMapper.university(u);
+    final universitySlug = university.id;
 
     final careerSlugByUuid = <String, String>{};
     final careerUuidBySlug = <String, String>{};

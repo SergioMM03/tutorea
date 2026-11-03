@@ -1,3 +1,4 @@
+import '../../domain/catalog_rules.dart';
 import '../../domain/models/models.dart';
 import '../../domain/repositories/repositories.dart';
 import 'local_database.dart';
@@ -14,7 +15,7 @@ class LocalUniversityRepository implements UniversityRepository {
       _db.readList(LocalDatabase.careers).map(Career.fromJson).toList();
 
   @override
-  Future<List<University>> getActive() async => _all().where((u) => u.activo).toList();
+  Future<List<University>> getActive() async => CatalogRules.active(_all());
 
   @override
   Future<University?> getById(String id) async {
@@ -26,8 +27,7 @@ class LocalUniversityRepository implements UniversityRepository {
 
   @override
   Future<List<Career>> getCareers(String universityId) async =>
-      _careers().where((c) => c.universityId == universityId).toList()
-        ..sort((a, b) => a.nombre.compareTo(b.nombre));
+      CatalogRules.careersOf(_careers(), universityId);
 
   @override
   Future<String?> getSelectedUniversityId() async =>

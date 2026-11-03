@@ -1,9 +1,11 @@
-/// Qué autenticación usa la app (Fase 14.5).
+/// Modo de datos de la app (Fases 14.5 a 14.8).
 ///
 ///   flutter run --dart-define-from-file=env/supabase.dev.json --dart-define=TUTOREA_AUTH=supabase
 ///
-/// Sin TUTOREA_AUTH, o con cualquier otro valor, se usa la autenticación local.
-/// Con `supabase` solo se usa si Supabase quedó inicializado; si no, también local.
+/// Con `supabase` (y Supabase inicializado): cuentas, perfiles, catálogo
+/// (universidades, carreras, materias), tutores y disponibilidad vienen de
+/// Supabase, y también las reservas (Fase 14.8). Sin TUTOREA_AUTH, con otro
+/// valor o sin Supabase: todo local.
 enum AuthMode {
   local,
   supabase;

@@ -44,7 +44,7 @@ abstract class RemoteAuthGateway {
   Stream<RemoteAuthEvent> get events;
 }
 
-/// Lecturas que la autenticación necesita (todas con la sesión del usuario y RLS).
+/// Perfiles (todas las operaciones con la sesión del usuario y RLS).
 abstract class RemoteProfileSource {
   /// Fila propia de `profiles` (RLS: solo la propia).
   Future<Map<String, dynamic>?> ownProfile(String userId);
@@ -52,8 +52,15 @@ abstract class RemoteProfileSource {
   /// Fila de `public_profiles` (misma universidad; sin correo).
   Future<Map<String, dynamic>?> publicProfile(String userId);
 
-  /// slug de una universidad a partir de su uuid.
-  Future<String?> universitySlugById(String universityUuid);
+  /// Actualiza SOLO nombre, carrera (uuid) y año del perfil [userId] y devuelve
+  /// la fila resultante, o null si RLS no dejó actualizarla. Rol y universidad
+  /// nunca se envían (además, la base los protege con permisos y un trigger).
+  Future<Map<String, dynamic>?> updateOwnProfile({
+    required String userId,
+    required String fullName,
+    required String careerUuid,
+    required int academicYear,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -114,12 +121,26 @@ class SupabaseProfileSource implements RemoteProfileSource {
   final SupabaseClient _client;
   SupabaseProfileSource(this._client);
 
+  static const String _ownColumns =
+      'id, university_id, role, full_name, career_id, career_name, academic_year, created_at';
+
   @override
-  Future<Map<String, dynamic>?> ownProfile(String userId) => _client
-      .from('profiles')
-      .select('id, university_id, role, full_name, career_id, career_name, academic_year, created_at')
-      .eq('id', userId)
-      .maybeSingle();
+  Future<Map<String, dynamic>?> ownProfile(String userId) =>
+      _client.from('profiles').select(_ownColumns).eq('id', userId).maybeSingle();
+
+  @override
+  Future<Map<String, dynamic>?> updateOwnProfile({
+    required String userId,
+    required String fullName,
+    required String careerUuid,
+    required int academicYear,
+  }) =>
+      _client
+          .from('profiles')
+          .update({'full_name': fullName, 'career_id': careerUuid, 'academic_year': academicYear})
+          .eq('id', userId)
+          .select(_ownColumns)
+          .maybeSingle();
 
   @override
   Future<Map<String, dynamic>?> publicProfile(String userId) => _client
@@ -127,17 +148,6 @@ class SupabaseProfileSource implements RemoteProfileSource {
       .select('id, university_id, full_name, career_name, academic_year, role')
       .eq('id', userId)
       .maybeSingle();
-
-  @override
-  Future<String?> universitySlugById(String universityUuid) async {
-    final row = await _client
-        .from('universities')
-        .select('slug')
-        .eq('id', universityUuid)
-        .maybeSingle();
-    final slug = row?['slug'];
-    return slug is String ? slug : null;
-  }
 }
 
 /// Cliente global, solo si SupabaseBootstrap confirmó la inicialización.

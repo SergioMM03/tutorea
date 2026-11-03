@@ -14,6 +14,14 @@ class LocalDatabase {
   static const String subjects = 'tutorea.subjects';
   static const String tutorProfiles = 'tutorea.tutorProfiles';
   static const String bookings = 'tutorea.bookings';
+
+  // Fase 14.9 (historial: confirmaciones, incidencias y su historial, reseñas;
+  // avisos: notificaciones).
+  static const String confirmations = 'tutorea.confirmations';
+  static const String incidents = 'tutorea.incidents';
+  static const String incidentEvents = 'tutorea.incidentEvents';
+  static const String reviews = 'tutorea.reviews';
+  static const String notifications = 'tutorea.notifications';
   static const String session = 'tutorea.session';
   static const String seedVersion = 'tutorea.seedVersion';
 
@@ -68,6 +76,11 @@ class LocalDatabase {
       subjects,
       tutorProfiles,
       bookings,
+      confirmations,
+      incidents,
+      incidentEvents,
+      reviews,
+      notifications,
       session,
       seedVersion,
       selectedUniversity,

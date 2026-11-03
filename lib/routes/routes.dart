@@ -7,7 +7,9 @@ import '../screens/home_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/my_bookings_screen.dart';
 import '../screens/not_found_screen.dart';
+import '../screens/notifications_screen.dart';
 import '../screens/register_screen.dart';
+import '../screens/report_incident_screen.dart';
 import '../screens/student_booking_detail_screen.dart';
 import '../screens/student_edit_profile_screen.dart';
 import '../screens/tutor_dashboard_screen.dart';
@@ -57,6 +59,10 @@ class AppRoutes {
   static const String profile = '/profile';
   static const String editStudentProfile = '/profile/edit';
   static const String search = '/search';
+
+  // Seguimiento (Fase 14.9)
+  static const String notifications = '/notifications';
+  static const String reportIncident = '/report-incident';
 }
 
 // ---------------- Argumentos entre pantallas ----------------
@@ -94,6 +100,11 @@ class StudentBookingDetailArgs {
 }
 
 /// Home → Búsqueda (opcional).
+class ReportIncidentArgs {
+  final String bookingId;
+  const ReportIncidentArgs(this.bookingId);
+}
+
 class SearchArgs {
   final String initialQuery;
   final String? category;
@@ -158,6 +169,13 @@ final Map<String, WidgetBuilder> appRoutes = {
   },
   AppRoutes.tutorMyProfile: (_) => const TutorMyProfileScreen(),
   AppRoutes.tutorEditProfile: (_) => const TutorEditProfileScreen(),
+
+  // Seguimiento (Fase 14.9)
+  AppRoutes.notifications: (_) => const NotificationsScreen(),
+  AppRoutes.reportIncident: (context) {
+    final args = _argsOf<ReportIncidentArgs>(context);
+    return args == null ? const NotFoundScreen() : ReportIncidentScreen(bookingId: args.bookingId);
+  },
 };
 
 /// Ruta inicial única (sin apilar '/' debajo, como haría Flutter con '/home').

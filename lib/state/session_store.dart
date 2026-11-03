@@ -47,6 +47,9 @@ class SessionStore extends ChangeNotifier {
   UserRole? get role => _session.rol;
 
   bool get isLoggedIn => _session.iniciada;
+  /// Rol principal elegido al registrarse: solo decide la pantalla inicial.
+  /// No limita lo que la cuenta puede hacer: cualquier cuenta solicita
+  /// tutorías y puede tener su propio perfil de tutor.
   bool get isStudent => role == UserRole.estudiante;
   bool get isTutor => role == UserRole.tutor;
 

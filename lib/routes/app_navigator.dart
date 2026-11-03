@@ -54,6 +54,16 @@ class AppNavigator {
       Navigator.pushNamed(context, AppRoutes.studentBookingDetail,
           arguments: StudentBookingDetailArgs(bookingId));
 
+  // ---------------- Seguimiento (Fase 14.9) ----------------
+
+  static void toNotifications(BuildContext context) =>
+      Navigator.pushNamed(context, AppRoutes.notifications);
+
+  /// Devuelve true si se envió el reporte.
+  static Future<bool> toReportIncident(BuildContext context, String bookingId) async =>
+      await Navigator.pushNamed(context, AppRoutes.reportIncident, arguments: ReportIncidentArgs(bookingId)) ==
+      true;
+
   // ---------------- Tutor ----------------
 
   /// Abre una pestaña del tutor como raíz (igual que [toTab]).
@@ -96,7 +106,8 @@ class AppNavigator {
   static void toTutorRegister(BuildContext context) =>
       toRegister(context, role: UserRole.tutor);
 
-  /// Ruta de entrada según el rol (también la usa main.dart al abrir la app).
+  /// Ruta de entrada según el rol principal (también la usa main.dart al abrir
+  /// la app). Desde el perfil se pasa al otro modo con la misma cuenta.
   static String homeRouteFor(UserRole role) => switch (role) {
         UserRole.estudiante => AppRoutes.home,
         UserRole.tutor => AppRoutes.tutorDashboard,

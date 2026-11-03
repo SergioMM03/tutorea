@@ -5,7 +5,8 @@ import 'booking_store.dart';
 import 'session_store.dart';
 import 'tutor_store.dart';
 
-/// Carga todo lo que usan las pantallas del tutor:
+/// Carga todo lo que usan las pantallas del tutor (cualquier cuenta: una misma
+/// cuenta puede ser estudiante y tutor; ofrecer tutorías = tener TutorProfile):
 /// 1. Su perfil (TutorStore.loadMyProfile) y el catálogo de materias.
 /// 2. Las solicitudes dirigidas a su perfil (BookingStore.loadForTutor).
 /// 3. Los estudiantes de esas solicitudes y su universidad (SessionStore.loadUsers).
@@ -15,7 +16,7 @@ Future<void> loadTutorWorkspace(BuildContext context) async {
   final bookings = context.read<BookingStore>();
 
   final user = session.user;
-  if (user == null || !session.isTutor) return;
+  if (user == null) return;
 
   await tutors.loadMyProfile(user.id);
   final profile = tutors.myProfile;

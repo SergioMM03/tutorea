@@ -11,6 +11,7 @@ import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../widgets/app_back_button.dart';
+import '../widgets/booking_follow_up_section.dart';
 import '../widgets/booking_status_badge.dart';
 import '../widgets/bottom_action_bar.dart';
 import '../widgets/rating_label.dart';
@@ -42,9 +43,16 @@ class _StudentBookingDetailScreenState extends State<StudentBookingDetailScreen>
 
   Future<void> _cancel(Booking booking) async {
     if (_cancelling) return; // evita dobles pulsaciones
-    if (!await confirmCancelBooking(context) || !mounted) return;
+    // Pendiente: confirmación. Aceptada: motivo obligatorio.
+    String? motivo;
+    if (booking.requiereMotivo) {
+      motivo = await askCancelReason(context);
+      if (motivo == null || !mounted) return;
+    } else if (!await confirmCancelBooking(context) || !mounted) {
+      return;
+    }
     setState(() => _cancelling = true); // indicador solo mientras se guarda
-    await cancelBookingWithFeedback(context, booking);
+    await cancelBookingWithFeedback(context, booking, motivo: motivo);
     if (mounted) setState(() => _cancelling = false);
   }
 
@@ -74,6 +82,8 @@ class _StudentBookingDetailScreenState extends State<StudentBookingDetailScreen>
         final hora = '${Formatters.time(start.hour * 60 + start.minute)} – '
             '${Formatters.time(end.hour * 60 + end.minute)}';
         final pending = booking.estado == BookingStatus.pendiente;
+        // Aceptada: se puede cancelar antes del inicio, con motivo.
+        final cancellable = store.canCancelAsStudent(booking);
         final working = _cancelling || store.isLoading;
 
         return Scaffold(
@@ -129,15 +139,31 @@ class _StudentBookingDetailScreenState extends State<StudentBookingDetailScreen>
                         label: 'Duración',
                         value: Formatters.durationMinutes(booking.duracion)),
                     RequestInfoRow(
+                        icon: Icons.videocam_outlined,
+                        label: 'Modalidad',
+                        value: booking.modalidad?.label ?? '—'),
+                    if (booking.ubicacion != null)
+                      RequestInfoRow(
+                          icon: Icons.place_outlined,
+                          label: booking.modalidad == TutoringModality.virtual ? 'Enlace' : 'Lugar',
+                          value: booking.ubicacion!),
+                    RequestInfoRow(
                         icon: Icons.payments_outlined,
                         label: 'Total',
                         value: Formatters.price(booking.precio)),
+                    if (booking.motivoCancelacion != null)
+                      RequestInfoRow(
+                          icon: Icons.info_outline_rounded,
+                          label: 'Motivo',
+                          value: booking.motivoCancelacion!),
                   ]),
                   const SizedBox(height: AppSpacing.md),
                   Text(
-                    _statusNote(booking.estado),
+                    _statusNote(booking),
                     style: textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
                   ),
+                  // Fase 14.9: confirmación, incidencias y calificación.
+                  BookingFollowUpSection(booking: booking, party: BookingParty.estudiante),
                   if (tutor != null) ...[
                     const SizedBox(height: AppSpacing.lg),
                     const SectionTitle(title: 'Sobre el tutor'),
@@ -158,7 +184,7 @@ class _StudentBookingDetailScreenState extends State<StudentBookingDetailScreen>
                                 style: textTheme.bodyMedium
                                     ?.copyWith(color: AppColors.textSecondary)),
                           ),
-                          RatingLabel(rating: tutor.rating),
+                          RatingLabel(rating: tutor.calificacion, count: tutor.totalResenas),
                         ],
                       ),
                       RequestInfoRow(
@@ -185,12 +211,12 @@ class _StudentBookingDetailScreenState extends State<StudentBookingDetailScreen>
               ),
             ),
           ),
-          // Solo una solicitud pendiente se puede cancelar.
-          bottomNavigationBar: !pending
+          // Pendiente: cancelar solicitud. Aceptada y antes del inicio: cancelar reserva.
+          bottomNavigationBar: !cancellable
               ? null
               : BottomActionBar(
                   child: SecondaryButton(
-                    label: 'Cancelar solicitud',
+                    label: pending ? 'Cancelar solicitud' : 'Cancelar reserva',
                     icon: Icons.close_rounded,
                     loading: working,
                     onPressed: working ? null : () => _cancel(booking),
@@ -201,13 +227,20 @@ class _StudentBookingDetailScreenState extends State<StudentBookingDetailScreen>
     );
   }
 
-  static String _statusNote(BookingStatus estado) => switch (estado) {
+  static String _statusNote(Booking booking) => switch (booking.estado) {
         BookingStatus.pendiente =>
           'El tutor aún no responde. Puedes cancelar la solicitud mientras esté pendiente.',
         BookingStatus.aceptada =>
-          'El tutor aceptó la tutoría. Una reserva aceptada ya no se puede cancelar desde la app.',
+          'El tutor aceptó la tutoría. Puedes cancelarla antes de la hora de inicio indicando el motivo. '
+              'Al terminar la sesión, confirma que se realizó.',
         BookingStatus.rechazada => 'El tutor rechazó esta solicitud.',
-        BookingStatus.cancelada => 'Cancelaste esta solicitud.',
+        BookingStatus.cancelada => booking.canceladaPor == null ||
+                booking.canceladaPor == booking.studentId
+            ? 'Cancelaste esta solicitud.'
+            : 'El tutor canceló esta reserva.',
+        BookingStatus.pendienteConfirmacion =>
+          'La sesión terminó. Falta que ambas partes confirmen que se realizó.',
+        BookingStatus.completada => 'Tutoría completada.',
       };
 }
 

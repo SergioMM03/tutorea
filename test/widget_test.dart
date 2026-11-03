@@ -202,6 +202,9 @@ void main() {
     expect(find.text('Materias que ofrezco'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Cerrar sesión'), 200,
         scrollable: profileList);
+    // Que quede completo en pantalla (no solo el borde sobre la barra inferior).
+    await tester.ensureVisible(find.text('Cerrar sesión'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Cerrar sesión'));
     await tester.pumpAndSettle();
     expect(find.text('Selecciona tu universidad'), findsOneWidget); // vuelve al inicio

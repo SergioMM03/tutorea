@@ -11,6 +11,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
 import '../widgets/form_error_banner.dart';
+import '../widgets/notification_bell.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/secondary_button.dart';
 import '../widgets/section_title.dart';
@@ -48,7 +49,11 @@ class _TutorDashboardScreenState extends State<TutorDashboardScreen>
     final loading = !tutorWorkspaceReady && bookings.tutorRequests.isEmpty;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Inicio'), automaticallyImplyLeading: false),
+      appBar: AppBar(
+        title: const Text('Inicio'),
+        automaticallyImplyLeading: false,
+        actions: const [NotificationBell()],
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: AppLayout.maxContentWidth),

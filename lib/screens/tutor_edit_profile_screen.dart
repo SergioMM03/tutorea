@@ -44,6 +44,8 @@ class _TutorEditProfileScreenState extends State<TutorEditProfileScreen> {
   static const int _defaultFrom = 8 * 60;
   static const int _defaultTo = 20 * 60;
   bool _active = true;
+  bool _inPerson = true;
+  bool _virtual = true;
   bool _saving = false;
   String? _validation;
 
@@ -81,6 +83,8 @@ class _TutorEditProfileScreenState extends State<TutorEditProfileScreen> {
         _slots.add(_SlotDraft(_nextSlotKey++, slot.diaSemana, slot.horaInicio, slot.horaFin));
       }
       _active = profile.activo;
+      _inPerson = profile.ofrecePresencial;
+      _virtual = profile.ofreceVirtual;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) tutors.clearError();
@@ -123,6 +127,7 @@ class _TutorEditProfileScreenState extends State<TutorEditProfileScreen> {
     if (_description.text.trim().isEmpty) return 'Escribe una descripción.';
     if (price == null || price <= 0) return 'Escribe un precio por hora válido.';
     if (_subjects.isEmpty) return 'Elige al menos una materia.';
+    if (!_inPerson && !_virtual) return 'Elige al menos una modalidad: presencial o virtual.';
     if (_slots.isEmpty) return 'Elige al menos un día disponible.';
     for (final s in _slots) {
       if (s.from >= s.to) {
@@ -180,6 +185,8 @@ class _TutorEditProfileScreenState extends State<TutorEditProfileScreen> {
           activo: _active,
           photoPath: _photoPath,
           removePhoto: _photoPath == null,
+          ofrecePresencial: _inPerson,
+          ofreceVirtual: _virtual,
         ) ??
         TutorProfile(
           id: _profileId,
@@ -191,6 +198,8 @@ class _TutorEditProfileScreenState extends State<TutorEditProfileScreen> {
           disponibilidad: slots,
           activo: _active,
           photoPath: _photoPath,
+          ofrecePresencial: _inPerson,
+          ofreceVirtual: _virtual,
         );
 
     setState(() => _saving = true);
@@ -330,6 +339,21 @@ class _TutorEditProfileScreenState extends State<TutorEditProfileScreen> {
                 ),
               ],
               const SizedBox(height: AppSpacing.lg),
+              // Fase 14.7: modalidades del tutor (al menos una).
+              SwitchListTile(
+                key: const Key('modality-in-person'),
+                contentPadding: EdgeInsets.zero,
+                title: Text('Tutorías presenciales', style: textTheme.titleMedium),
+                value: _inPerson,
+                onChanged: (v) => setState(() => _inPerson = v),
+              ),
+              SwitchListTile(
+                key: const Key('modality-virtual'),
+                contentPadding: EdgeInsets.zero,
+                title: Text('Tutorías virtuales', style: textTheme.titleMedium),
+                value: _virtual,
+                onChanged: (v) => setState(() => _virtual = v),
+              ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text('Visible para estudiantes', style: textTheme.titleMedium),

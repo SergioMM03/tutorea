@@ -56,7 +56,7 @@ class TutorCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: AppSpacing.xs),
-                      RatingLabel(rating: tutor.rating),
+                      RatingLabel(rating: tutor.calificacion),
                       const SizedBox(height: AppSpacing.xs),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.end,

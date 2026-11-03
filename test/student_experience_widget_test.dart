@@ -172,14 +172,37 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Cancelada'), findsOneWidget);
 
-    // Una aceptada no se puede cancelar.
+    // Una aceptada (Fase 14.8) se cancela antes del inicio, con motivo.
     await tester.tap(find.text('Próximas'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Finanzas'));
     await tester.pumpAndSettle();
     expect(find.text('Aceptada'), findsOneWidget);
     expect(find.text('Cancelar solicitud'), findsNothing);
-    expect(find.textContaining('ya no se puede cancelar'), findsOneWidget);
+    expect(find.text('Cancelar reserva'), findsOneWidget);
+    // La nota está debajo de la tarjeta de la sesión: la lista la construye al hacer scroll.
+    final detailList =
+        find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable)).first;
+    await tester.scrollUntilVisible(find.textContaining('indicando el motivo'), 200,
+        scrollable: detailList);
+    expect(find.textContaining('indicando el motivo'), findsOneWidget);
+    await tester.tap(find.text('Cancelar reserva'));
+    await tester.pumpAndSettle();
+    expect(find.text('¿Cancelar reserva?'), findsOneWidget);
+    // Sin motivo no se puede confirmar.
+    final confirm = find.widgetWithText(TextButton, 'Sí, cancelar');
+    expect(tester.widget<TextButton>(confirm).onPressed, isNull);
+    await tester.enterText(find.byKey(const Key('cancel-reason')), 'Tengo examen');
+    await tester.pump();
+    await tester.tap(confirm);
+    await tester.pumpAndSettle();
+    expect(find.text('Reserva cancelada'), findsOneWidget);
+    expect(find.text('Cancelar reserva'), findsNothing);
+    // El motivo queda visible en la tarjeta de la sesión, y el estado arriba.
+    await tester.scrollUntilVisible(find.text('Tengo examen'), 200, scrollable: detailList);
+    expect(find.text('Tengo examen'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Cancelada'), -200, scrollable: detailList);
+    expect(find.text('Cancelada'), findsOneWidget);
   });
 
   testWidgets('Cancelar desde Mis reservas y conservarlo al reabrir la app', (tester) async {

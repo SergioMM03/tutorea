@@ -12,6 +12,7 @@ import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
 import '../widgets/form_error_banner.dart';
+import '../widgets/notification_bell.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/rating_label.dart';
 import '../widgets/secondary_button.dart';
@@ -19,9 +20,11 @@ import '../widgets/section_title.dart';
 import '../widgets/subject_chip.dart';
 import '../widgets/tutor_avatar.dart';
 import '../widgets/tutor_bottom_nav.dart';
+import '../widgets/tutor_reviews_section.dart';
 
 /// Perfil propio del tutor: datos académicos, descripción, materias,
-/// precio, disponibilidad y valoración. Desde aquí se edita y se cierra sesión.
+/// precio, disponibilidad y valoración. Desde aquí se edita, se vuelve al modo
+/// estudiante (buscar y solicitar tutorías, con la misma cuenta) y se cierra sesión.
 class TutorMyProfileScreen extends StatefulWidget {
   const TutorMyProfileScreen({super.key});
 
@@ -50,7 +53,11 @@ class _TutorMyProfileScreenState extends State<TutorMyProfileScreen>
             : a.horaInicio.compareTo(b.horaInicio)));
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Mi perfil'), automaticallyImplyLeading: false),
+      appBar: AppBar(
+        title: const Text('Mi perfil'),
+        automaticallyImplyLeading: false,
+        actions: const [NotificationBell()],
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: AppLayout.maxContentWidth),
@@ -69,7 +76,7 @@ class _TutorMyProfileScreenState extends State<TutorMyProfileScreen>
                   textAlign: TextAlign.center, style: textTheme.headlineMedium),
               if (profile != null) ...[
                 const SizedBox(height: AppSpacing.xs),
-                Center(child: RatingLabel(rating: profile.rating, large: true)),
+                Center(child: RatingLabel(rating: profile.calificacion, count: profile.totalResenas, large: true)),
               ],
               const SizedBox(height: AppSpacing.lg),
               if (tutors.error != null) ...[
@@ -128,12 +135,21 @@ class _TutorMyProfileScreenState extends State<TutorMyProfileScreen>
                         '${Formatters.time(s.horaInicio)} – ${Formatters.time(s.horaFin)}',
                       ),
                   ]),
+                const SizedBox(height: AppSpacing.lg),
+                // Fase 14.9: lo que ven los estudiantes de sus reseñas.
+                TutorReviewsSection(tutorId: profile.id, emptyText: 'Aún no recibes calificaciones.'),
               ],
               const SizedBox(height: AppSpacing.xl),
               PrimaryButton(
                 label: profile == null ? 'Crear perfil' : 'Editar perfil',
                 icon: Icons.edit_outlined,
                 onPressed: user == null ? null : () => AppNavigator.toTutorEditProfile(context),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              SecondaryButton(
+                key: const Key('to-student-space'),
+                label: 'Buscar y solicitar tutorías',
+                onPressed: () => AppNavigator.toHome(context),
               ),
               const SizedBox(height: AppSpacing.sm),
               SecondaryButton(

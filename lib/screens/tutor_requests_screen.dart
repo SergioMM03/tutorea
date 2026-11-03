@@ -31,7 +31,12 @@ class _TutorRequestsScreenState extends State<TutorRequestsScreen>
     final tutors = context.watch<TutorStore>();
 
     final pending = bookings.tutorRequestsWith(BookingStatus.pendiente);
-    final accepted = bookings.tutorRequestsWith(BookingStatus.aceptada);
+    // Aceptadas incluye las que esperan confirmación y las completadas.
+    final accepted = bookings.tutorRequestsIn(const {
+      BookingStatus.aceptada,
+      BookingStatus.pendienteConfirmacion,
+      BookingStatus.completada,
+    });
     final rejected = bookings.tutorRequestsWith(BookingStatus.rechazada);
     final cancelled = bookings.tutorRequestsWith(BookingStatus.cancelada);
 

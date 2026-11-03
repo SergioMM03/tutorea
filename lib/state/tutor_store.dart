@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../domain/models/models.dart';
+import '../domain/photo_rules.dart';
 import '../domain/repositories/repositories.dart';
 
 /// Lo que la UI necesita para mostrar un tutor: perfil + cuenta + materias.
@@ -40,7 +41,15 @@ class TutorStore extends ChangeNotifier {
   final UniversityRepository? _universities; // solo para nombres de carrera
   final ProfilePhotoRepository? _photos; // fotografía de perfil (opcional)
 
-  TutorStore(this._tutors, this._subjects, this._auth, [this._universities, this._photos]);
+  /// Fotografías en Supabase Storage (Fase 14.10). Sin él (modo de desarrollo
+  /// local y pruebas) la foto es un archivo del dispositivo.
+  final TutorPhotoStorage? _photoStorage;
+
+  TutorStore(this._tutors, this._subjects, this._auth,
+      [this._universities, this._photos, this._photoStorage]);
+
+  /// Para mostrar fotos guardadas en Storage (URLs firmadas).
+  PhotoUrlResolver? get photoUrls => _photoStorage;
 
   List<Subject> _catalog = const [];
   List<TutorSummary> _available = const [];
@@ -53,6 +62,13 @@ class TutorStore extends ChangeNotifier {
   TutoringModality? _modalityFilter;
   DateTime? _availableAt;
   int _availableMinutes = 60;
+
+  /// Calificación mínima (null = cualquiera). Los tutores «Nuevo» (sin
+  /// reseñas) no cumplen ningún mínimo: no se inventan calificaciones.
+  double? _minRating;
+
+  /// Cuenta que busca: su propio perfil de tutor no se ofrece para reservar.
+  String? _viewerId;
 
   /// Todos los tutores ya resueltos, por id de perfil (aunque no pasen el
   /// filtro actual). Lo usan Mis reservas y el detalle de una reserva.
@@ -102,7 +118,11 @@ class TutorStore extends ChangeNotifier {
       _categoryFilter != null ||
       _subjectFilter != null ||
       _modalityFilter != null ||
-      _availableAt != null;
+      _availableAt != null ||
+      _minRating != null;
+
+  /// Calificación mínima elegida (null = cualquiera).
+  double? get minRatingFilter => _minRating;
 
   /// Tutores disponibles que coinciden con el texto y la carrera.
   /// (Universidad y categoría ya vienen filtradas en [availableTutors].)
@@ -128,7 +148,9 @@ class TutorStore extends ChangeNotifier {
 
   /// Muestra solo tutores (y materias) de esa universidad.
   /// Normalmente la del usuario actual: SessionStore.user.universityId.
-  Future<void> loadForUniversity(String? universityId) {
+  /// [viewerId]: la cuenta que busca (su propio perfil no aparece).
+  Future<void> loadForUniversity(String? universityId, {String? viewerId}) {
+    if (viewerId != null) _viewerId = viewerId;
     if (universityId != _universityId) {
       _universityId = universityId;
       _catalog = const []; // el catálogo cambia con la universidad
@@ -138,6 +160,7 @@ class TutorStore extends ChangeNotifier {
       _careerFilter = null;
       _modalityFilter = null;
       _availableAt = null;
+      _minRating = null;
       _query = '';
     }
     return loadAvailable();
@@ -183,6 +206,12 @@ class TutorStore extends ChangeNotifier {
     return loadAvailable();
   }
 
+  /// Filtra por calificación mínima (null = cualquiera).
+  Future<void> filterByMinRating(double? minimo) {
+    _minRating = minimo;
+    return loadAvailable();
+  }
+
   /// Busca por nombre del tutor o materia (sin distinguir mayúsculas ni tildes).
   void search(String text) {
     if (text == _query) return;
@@ -205,6 +234,7 @@ class TutorStore extends ChangeNotifier {
     _subjectFilter = null;
     _modalityFilter = null;
     _availableAt = null;
+    _minRating = null;
     return loadAvailable();
   }
 
@@ -261,8 +291,12 @@ class TutorStore extends ChangeNotifier {
       });
 
   /// Crea o actualiza el perfil del tutor. Devuelve true si se guardó.
+  /// Con Storage, después de guardar el perfil sube, reemplaza o quita la
+  /// fotografía ([TutorProfile.photoPath] local = nueva; null = quitarla).
   Future<bool> saveProfile(TutorProfile profile) => _run(() async {
+        final previousPhoto = _myProfile?.photoPath;
         _myProfile = await _tutors.save(profile);
+        await _syncPhoto(_myProfile!, profile.photoPath, previousPhoto);
         // La lista de estudiantes puede cambiar (precio, materias, activo).
         final profiles = await _queryAvailable();
         _available = await _summaries(profiles);
@@ -273,6 +307,24 @@ class TutorStore extends ChangeNotifier {
   /// Hay selector de fotografías disponible (en pruebas puede no haberlo).
   bool get canPickPhotos => _photos != null;
 
+  Future<void> _syncPhoto(TutorProfile saved, String? desired, String? previous) async {
+    final storage = _photoStorage;
+    if (storage == null || desired == previous) return;
+    try {
+      if (desired == null) {
+        await storage.remove(saved);
+      } else if (!PhotoRules.isStoragePath(desired)) {
+        await storage.upload(saved, desired);
+        await deletePhotoFile(desired); // la copia local ya no hace falta
+      }
+    } on RepositoryException catch (e) {
+      throw RepositoryException('Tu perfil se guardó, pero la fotografía no: ${e.message}');
+    } finally {
+      // Lo que quedó en el servidor (con o sin la foto nueva).
+      _myProfile = await _tutors.getById(saved.id) ?? saved;
+    }
+  }
+
   /// Abre la galería y guarda una COPIA permanente de la imagen.
   /// Devuelve la ruta de la copia, o null si se canceló o falló
   /// (el motivo queda en [error]). No cambia el perfil: eso lo hace [saveProfile].
@@ -282,6 +334,13 @@ class TutorStore extends ChangeNotifier {
     try {
       final temp = await photos.pickFromGallery();
       if (temp == null) return null; // canceló
+      // Con Storage se valida antes de mostrarla: JPEG, PNG o WebP de hasta 2 MB.
+      final problem = await _photoStorage?.validate(temp);
+      if (problem != null) {
+        _error = problem;
+        notifyListeners();
+        return null;
+      }
       return await photos.saveCopy(temp, ownerId: ownerId);
     } catch (_) {
       _error = 'No se pudo cargar la fotografía. Intenta con otra imagen.';
@@ -310,6 +369,8 @@ class TutorStore extends ChangeNotifier {
     _careerFilter = null;
     _modalityFilter = null;
     _availableAt = null;
+    _minRating = null;
+    _viewerId = null;
     _careers = const [];
     _known.clear();
     _query = '';
@@ -325,14 +386,22 @@ class TutorStore extends ChangeNotifier {
 
   // ---------------- Interno ----------------
 
-  Future<List<TutorProfile>> _queryAvailable() => _tutors.getAvailable(
-        universityId: _universityId,
-        subjectId: _subjectFilter,
-        categoria: _categoryFilter,
-        modalidad: _modalityFilter,
-        disponibleEn: _availableAt,
-        duracionMinutos: _availableMinutes,
-      );
+  Future<List<TutorProfile>> _queryAvailable() async {
+    final profiles = await _tutors.getAvailable(
+      universityId: _universityId,
+      subjectId: _subjectFilter,
+      categoria: _categoryFilter,
+      modalidad: _modalityFilter,
+      disponibleEn: _availableAt,
+      duracionMinutos: _availableMinutes,
+    );
+    final viewer = _viewerId;
+    final min = _minRating;
+    return [
+      for (final p in profiles)
+        if (p.userId != viewer && (min == null || (p.calificacion ?? -1) >= min)) p,
+    ];
+  }
 
   /// Minúsculas y sin tildes: "Estadística" → "estadistica".
   static String _normalize(String text) {

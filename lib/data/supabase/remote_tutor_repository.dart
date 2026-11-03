@@ -16,8 +16,8 @@ import 'remote_catalog_repositories.dart';
 /// perfil: el id, userId y universityId que envía la app se ignoran.
 ///
 /// Ids: el perfil y el usuario son uuid; las materias se traducen slug ↔ uuid
-/// con el catálogo remoto ([RemoteCatalogCache]). La fotografía todavía no se
-/// sube (fase de Storage): photoPath siempre es null en este modo.
+/// con el catálogo remoto ([RemoteCatalogCache]). La fotografía se sube con
+/// TutorPhotoStorage (Fase 14.10): photoPath es la ruta del objeto en Storage.
 class RemoteTutorRepository implements TutorRepository {
   final TutorRowsSource _source;
   final RemoteCatalogCache _catalog;
@@ -164,7 +164,8 @@ class RemoteTutorRepository implements TutorRepository {
       rating: rating is num ? rating.toDouble() : 0, // sin reseñas: null en la base («Nuevo»)
       totalResenas: row['rating_count'] is num ? (row['rating_count'] as num).toInt() : 0,
       activo: row['is_active'] == true,
-      photoPath: null, // Storage llega en la fase de fotografías
+      // Ruta del objeto en el bucket privado tutor-photos (Fase 14.10).
+      photoPath: row['photo_path'] is String ? row['photo_path'] as String : null,
       ofrecePresencial: row['offers_in_person'] == true,
       ofreceVirtual: row['offers_virtual'] == true,
     );
@@ -258,7 +259,7 @@ class SupabaseTutorSource implements TutorRowsSource {
 
   static const String _columns =
       'id, user_id, university_id, description, hourly_rate, offers_in_person, offers_virtual, '
-      'is_active, rating_avg, rating_count, '
+      'is_active, rating_avg, rating_count, photo_path, '
       'tutor_subjects(subject_id), availability_slots(weekday, start_minute, end_minute)';
 
   @override

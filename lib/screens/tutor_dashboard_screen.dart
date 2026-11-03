@@ -15,6 +15,7 @@ import '../widgets/notification_bell.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/secondary_button.dart';
 import '../widgets/section_title.dart';
+import '../widgets/tutor_avatar.dart';
 import '../widgets/tutor_bottom_nav.dart';
 import '../widgets/tutor_request_card.dart';
 
@@ -62,15 +63,33 @@ class _TutorDashboardScreenState extends State<TutorDashboardScreen>
             child: ListView(
               padding: const EdgeInsets.all(AppSpacing.screenPadding),
               children: [
-                Text(
-                  user == null ? 'Hola' : 'Hola, ${user.nombre.split(' ').first}',
-                  style: textTheme.headlineMedium,
+                Row(
+                  children: [
+                    // Fotografía del perfil de tutor (Storage, Fase 14.10).
+                    TutorAvatar(
+                      name: user?.nombre ?? '',
+                      photoPath: tutors.myProfile?.photoPath,
+                      size: 56,
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user == null ? 'Hola' : 'Hola, ${user.nombre.split(' ').first}',
+                            style: textTheme.headlineMedium,
+                          ),
+                          if (academic.isNotEmpty) ...[
+                            const SizedBox(height: AppSpacing.xs),
+                            Text(academic,
+                                style: textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary)),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                if (academic.isNotEmpty) ...[
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(academic,
-                      style: textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary)),
-                ],
                 const SizedBox(height: AppSpacing.lg),
                 if (tutors.error != null || bookings.error != null) ...[
                   FormErrorBanner(message: tutors.error ?? bookings.error!),

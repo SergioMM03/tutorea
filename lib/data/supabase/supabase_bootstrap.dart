@@ -11,10 +11,9 @@ typedef SupabaseInitializer = Future<void> Function(SupabaseConfig config);
 /// Inicializa Supabase solo si hay una configuración válida (Fase 14.3).
 ///
 /// - Sin configuración, con una clave prohibida o si la inicialización falla,
-///   no lanza excepciones: devuelve false y la app sigue en modo local.
-/// - No hace consultas ni cambia repositorios: los datos siguen en
-///   shared_preferences. Supabase guarda su sesión con una clave propia
-///   (sb-<project-ref>-auth-token) que no choca con las claves tutorea.*.
+///   no lanza excepciones: devuelve false. Desde la Fase 14.10 la app muestra
+///   entonces un error con "Reintentar" (no hay respaldo local en producción).
+/// - Supabase guarda su sesión con una clave propia (sb-<project-ref>-auth-token).
 class SupabaseBootstrap {
   SupabaseBootstrap._();
 
@@ -42,14 +41,13 @@ class SupabaseBootstrap {
     try {
       await (initializer ?? _initializeClient)(effective).timeout(timeout);
       _ready = true;
-      debugPrint('[Supabase] Inicializado (${effective.url}). Datos todavía en modo local.');
+      debugPrint('[Supabase] Inicializado (${effective.url}).');
       return true;
     } on TimeoutException {
-      debugPrint('[Supabase] La inicialización tardó más de ${timeout.inSeconds} s. '
-          'La app sigue en modo local.');
+      debugPrint('[Supabase] La inicialización tardó más de ${timeout.inSeconds} s.');
       return false;
     } catch (error) {
-      debugPrint('[Supabase] No se pudo inicializar ($error). La app sigue en modo local.');
+      debugPrint('[Supabase] No se pudo inicializar ($error).');
       return false;
     }
   }

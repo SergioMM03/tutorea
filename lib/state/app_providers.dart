@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../data/device/device_profile_photo_repository.dart';
 import '../data/local/local_repositories.dart';
+import '../data/supabase/auth_selection.dart';
 import '../domain/repositories/repositories.dart';
 import 'booking_store.dart';
 import 'follow_up_stores.dart';
@@ -24,6 +25,9 @@ class AppProviders extends StatelessWidget {
   final NotificationRepository notifications;
   final UniversityRepository? universities;
   final ProfilePhotoRepository? photos;
+
+  /// Fotografías en Supabase Storage (Fase 14.10); null en desarrollo local.
+  final TutorPhotoStorage? photoStorage;
   final Widget child;
 
   const AppProviders({
@@ -37,11 +41,35 @@ class AppProviders extends StatelessWidget {
     required this.notifications,
     this.universities,
     this.photos,
+    this.photoStorage,
     required this.child,
   });
 
-  /// Versión local (shared_preferences). Para Firebase se agregaría
-  /// `AppProviders.firebase(...)` y se cambia la llamada en main.dart.
+  /// Producción (Fase 14.10): todo viene de [data] (Supabase); no se abre la
+  /// base local. [photos] solo elige la imagen en la galería.
+  factory AppProviders.fromSources(
+    AppDataSources data, {
+    Key? key,
+    ProfilePhotoRepository? photos,
+    required Widget child,
+  }) =>
+      AppProviders(
+        key: key,
+        auth: data.auth,
+        subjects: data.subjects,
+        tutors: data.tutors,
+        bookings: data.bookings,
+        incidents: data.incidents,
+        reviews: data.reviews,
+        notifications: data.notifications,
+        universities: data.universities,
+        photos: photos ?? DeviceProfilePhotoRepository(),
+        photoStorage: data.photoStorage,
+        child: child,
+      );
+
+  /// Versión local (shared_preferences): SOLO desarrollo y pruebas. Producción
+  /// usa [AppProviders.fromSources] con Supabase.
   /// [photos]: selector de fotografías; por defecto la galería del dispositivo
   /// (las pruebas pasan uno falso).
   /// [auth], [universities], [subjects], [tutors], [bookings] y, desde la Fase
@@ -82,7 +110,9 @@ class AppProviders extends StatelessWidget {
         // load(): recupera la sesión guardada en cuanto arranca la app.
         ChangeNotifierProvider<SessionStore>(create: (_) => SessionStore(auth, universities)..load()),
         ChangeNotifierProvider<TutorStore>(
-            create: (_) => TutorStore(tutors, subjects, auth, universities, photos)),
+            create: (_) => TutorStore(tutors, subjects, auth, universities, photos, photoStorage)),
+        // URLs firmadas de las fotos en Storage (null en desarrollo local).
+        Provider<PhotoUrlResolver?>.value(value: photoStorage),
         ChangeNotifierProvider<BookingStore>(create: (_) => BookingStore(bookings)),
         ChangeNotifierProvider<IncidentStore>(create: (_) => IncidentStore(incidents)),
         ChangeNotifierProvider<ReviewStore>(create: (_) => ReviewStore(reviews)),

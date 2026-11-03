@@ -1,19 +1,29 @@
-/// Modo de datos de la app (Fases 14.5 a 14.8).
+import 'package:flutter/foundation.dart';
+
+/// Origen de los datos de la app (Fase 14.10).
 ///
-///   flutter run --dart-define-from-file=env/supabase.dev.json --dart-define=TUTOREA_AUTH=supabase
+/// Producción: SIEMPRE Supabase (Auth + datos de negocio). No hay respaldo
+/// local: si Supabase no está configurado o no responde, la app muestra un
+/// error con "Reintentar" (StartupErrorApp).
 ///
-/// Con `supabase` (y Supabase inicializado): cuentas, perfiles, catálogo
-/// (universidades, carreras, materias), tutores y disponibilidad vienen de
-/// Supabase, y también las reservas (Fase 14.8). Sin TUTOREA_AUTH, con otro
-/// valor o sin Supabase: todo local.
+/// Solo una compilación de DESARROLLO (debug o profile, nunca release) puede
+/// pedir los datos locales de demostración, y solo de forma explícita:
+///
+///   flutter run --dart-define=TUTOREA_AUTH=local
+///
+/// Cualquier otro valor, o ninguno, es Supabase:
+///
+///   flutter run --dart-define-from-file=env/supabase.dev.json
 enum AuthMode {
   local,
   supabase;
 
   static const String variable = 'TUTOREA_AUTH';
 
-  static AuthMode fromEnvironment() => parse(const String.fromEnvironment(variable));
+  static AuthMode fromEnvironment() =>
+      resolve(const String.fromEnvironment(variable), releaseMode: kReleaseMode);
 
-  static AuthMode parse(String value) =>
-      value.trim().toLowerCase() == 'supabase' ? AuthMode.supabase : AuthMode.local;
+  /// En release nunca es local, aunque se pida.
+  static AuthMode resolve(String value, {required bool releaseMode}) =>
+      !releaseMode && value.trim().toLowerCase() == 'local' ? AuthMode.local : AuthMode.supabase;
 }

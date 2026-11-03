@@ -11,45 +11,61 @@ import 'routes/routes.dart';
 import 'state/app_providers.dart';
 import 'theme/app_theme.dart';
 import 'widgets/booking_notice_listener.dart';
+import 'widgets/startup_error_app.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await startTutorea();
+}
 
-  // Abre la base local (shared_preferences) y carga los datos iniciales.
-  final repositories = await LocalRepositories.open();
+/// Arranca la app. Producción (Fase 14.10): solo Supabase. Si Supabase no está
+/// configurado o no responde, muestra un error con "Reintentar" (que vuelve a
+/// llamar a esta función); nunca cambia a datos locales.
+Future<void> startTutorea({AuthMode? mode}) async {
+  final effective = mode ?? AuthMode.fromEnvironment();
+  try {
+    runApp(await _buildApp(effective));
+  } on DataSourcesUnavailable catch (e) {
+    runApp(StartupErrorApp(message: e.message, onRetry: () => startTutorea(mode: effective)));
+  }
+}
 
-  // Fase 14.3: Supabase se inicializa solo con configuración válida
-  // (--dart-define-from-file). Todavía no se usa: los datos siguen siendo
-  // locales. Si no hay configuración o falla, la app arranca igual que antes.
+Future<Widget> _buildApp(AuthMode mode) async {
+  if (mode == AuthMode.local) {
+    // Desarrollo (TUTOREA_AUTH=local, nunca en release): datos de demostración
+    // en el dispositivo.
+    final repositories = await LocalRepositories.open();
+    final data = selectDataSources(
+      mode: mode,
+      supabaseReady: false,
+      local: () => localDataSources(repositories),
+      remote: () => throw StateError('modo local'),
+    );
+    final session = await data.auth.currentSession();
+    return AppProviders.local(repositories,
+        child: TutoreaApp(initialRoute: AppNavigator.initialRouteFor(session)));
+  }
+
+  // Producción: Supabase Auth y todos los datos de negocio en Supabase.
   await SupabaseBootstrap.initializeIfConfigured();
-
-  // Fases 14.5 a 14.8: con TUTOREA_AUTH=supabase (y Supabase inicializado),
-  // cuentas, perfiles, catálogo, tutores, disponibilidad y reservas usan
-  // Supabase; si no, los repositorios locales.
   final data = selectDataSources(
-    mode: AuthMode.fromEnvironment(),
+    mode: mode,
     supabaseReady: SupabaseBootstrap.isReady,
-    local: localDataSources(repositories),
-    remote: () => supabaseDataSources(repositories),
+    local: () => throw StateError('Producción no usa datos locales.'),
+    remote: supabaseDataSources,
   );
+  // ¿Responde el servidor? (catálogo público de universidades)
+  try {
+    await data.universities.getActive().timeout(const Duration(seconds: 10));
+  } catch (_) {
+    throw const DataSourcesUnavailable(supabaseUnreachableMessage);
+  }
 
   // Con sesión guardada abre directo en la pantalla de su rol;
   // sin sesión, en la selección de universidad.
   final session = await data.auth.currentSession();
-  final initialRoute = AppNavigator.initialRouteFor(session);
-
-  runApp(AppProviders.local(
-    repositories,
-    auth: data.auth,
-    universities: data.universities,
-    subjects: data.subjects,
-    tutors: data.tutors,
-    bookings: data.bookings,
-    incidents: data.incidents,
-    reviews: data.reviews,
-    notifications: data.notifications,
-    child: TutoreaApp(initialRoute: initialRoute),
-  ));
+  return AppProviders.fromSources(data,
+      child: TutoreaApp(initialRoute: AppNavigator.initialRouteFor(session)));
 }
 
 class TutoreaApp extends StatelessWidget {

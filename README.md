@@ -65,27 +65,22 @@ Consulta exitosa: en la consola y en pantalla (barra verde) aparece
 `[Diagnóstico catálogo] RESULTADO: OK — el catálogo remoto coincide con el local (1 universidad, 4 carreras, 13 materias).`
 Si algo falla aparece `RESULTADO: ERROR` o `RESULTADO: DIFERENCIAS` con el detalle (barra roja).
 
-### Modo Supabase (Fases 14.5 a 14.7)
+### Producción: solo Supabase (Fase 14.10)
 
-Por defecto todo sigue siendo local. Con `TUTOREA_AUTH=supabase`, las cuentas, los
-perfiles, el catálogo (universidades, carreras y materias) y los tutores con su
-disponibilidad vienen de Supabase:
+La app usa siempre Supabase: Auth, perfiles, catálogo, tutores, disponibilidad,
+fotografías (Storage), reservas, confirmaciones, incidencias, reseñas y notificaciones.
 
-    flutter run --dart-define-from-file=env/supabase.dev.json --dart-define=TUTOREA_AUTH=supabase
+    flutter run --dart-define-from-file=env/supabase.dev.json
 
-En la consola aparece `[Datos] Supabase activo: cuentas, perfiles, catálogo, tutores y disponibilidad. Las reservas siguen en modo local.`
-Si Supabase no está configurado o no se inicializa, aparece `[Datos] ... Modo local.`
+Si falta la configuración o el servidor no responde, la app muestra «Sin conexión con
+Tutorea» con un botón «Reintentar». Nunca cambia a datos locales.
 
-Requisito para tutores: haber desplegado las migraciones 12 a 15 (ver `supabase/README.md`).
+Solo para desarrollo (nunca en release) existe el modo local de demostración, que hay
+que pedir explícitamente:
 
-- Registro: la cuenta se crea en Supabase Auth y el perfil lo crea la base (`handle_new_user`).
-- Editar perfil: nombre, carrera y año en `profiles` (solo el propio).
-- Perfil de tutor: descripción, tarifa, modalidades, materias, horarios y visibilidad se guardan
-  juntos con `save_tutor_profile`; solo una cuenta tutor puede tenerlo y solo el propio.
-- Búsqueda: tutores activos de la misma universidad (RLS), con filtros por materia, categoría,
-  modalidad y disponibilidad.
-- Todavía locales: reservas (validan contra los tutores remotos). Aún no: fotografía del tutor
-  en Supabase (Storage), cuentas demo y administradores en la app.
-- Las cuentas, tutores y reservas locales no se migran: en modo Supabase empiezan vacíos.
+    flutter run --dart-define=TUTOREA_AUTH=local
+
+Lo único que guarda el dispositivo en producción es la universidad elegida en la
+pantalla inicial (preferencia) y la sesión de Supabase Auth.
 
 Esquema de la base, seed y pruebas SQL: ver `supabase/README.md`.

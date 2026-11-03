@@ -12,5 +12,6 @@ export 'profile_photo_repository.dart';
 export 'repository_exception.dart';
 export 'review_repository.dart';
 export 'subject_repository.dart';
+export 'tutor_photo_storage.dart';
 export 'tutor_repository.dart';
 export 'university_repository.dart';

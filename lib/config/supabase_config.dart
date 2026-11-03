@@ -5,7 +5,7 @@ enum SupabaseConfigStatus {
   /// URL https y publishable key (o anon key antigua) válidas.
   valid,
 
-  /// Falta la URL, la clave o ambas: la app trabaja solo en modo local.
+  /// Falta la URL, la clave o ambas: la app muestra un error al arrancar (Fase 14.10).
   missing,
 
   /// La URL no es https o no tiene dominio.
@@ -72,14 +72,14 @@ class SupabaseConfig {
   String get description => switch (status) {
         SupabaseConfigStatus.valid => 'Configuración de Supabase válida ($url).',
         SupabaseConfigStatus.missing =>
-          'Supabase no configurado: faltan $urlVariable o $keyVariable. La app sigue en modo local.',
+          'Supabase no configurado: faltan $urlVariable o $keyVariable.',
         SupabaseConfigStatus.invalidUrl =>
-          '$urlVariable no es una URL https válida. La app sigue en modo local.',
+          '$urlVariable no es una URL https válida.',
         SupabaseConfigStatus.forbiddenKey =>
           'RECHAZADA: $keyVariable es una clave secreta o service_role. '
-              'Nunca se usa en Flutter; usa la publishable key. La app sigue en modo local.',
+              'Nunca se usa en Flutter; usa la publishable key.',
         SupabaseConfigStatus.invalidKey =>
-          '$keyVariable no tiene el formato de una publishable key. La app sigue en modo local.',
+          '$keyVariable no tiene el formato de una publishable key.',
       };
 
   @override

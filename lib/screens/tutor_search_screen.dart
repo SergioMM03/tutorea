@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../domain/models/models.dart';
 import '../routes/app_navigator.dart';
 import '../routes/routes.dart';
 import '../state/session_store.dart';
 import '../state/tutor_store.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+import '../utils/formatters.dart';
 import '../widgets/app_back_button.dart';
 import '../widgets/secondary_button.dart';
 import '../widgets/subject_chip.dart';
@@ -60,7 +62,29 @@ class _TutorSearchScreenState extends State<TutorSearchScreen> {
     if (!mounted) return Future.value();
     final universityId = context.read<SessionStore>().user?.universityId;
     if (universityId == null) return Future.value();
-    return context.read<TutorStore>().loadForUniversity(universityId);
+    final viewerId = context.read<SessionStore>().user?.id;
+    return context.read<TutorStore>().loadForUniversity(universityId, viewerId: viewerId);
+  }
+
+  /// Día y hora de una sesión de 60 min (filtro de disponibilidad).
+  Future<void> _pickAvailability() async {
+    final store = context.read<TutorStore>();
+    final now = DateTime.now();
+    final day = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: now.add(const Duration(days: 60)),
+      helpText: 'Día de la tutoría',
+    );
+    if (day == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: const TimeOfDay(hour: 10, minute: 0),
+      helpText: 'Hora de inicio',
+    );
+    if (time == null || !mounted) return;
+    await store.filterByAvailability(DateTime(day.year, day.month, day.day, time.hour, time.minute));
   }
 
   Future<void> _clearAll() {
@@ -166,6 +190,71 @@ class _TutorSearchScreenState extends State<TutorSearchScreen> {
                 selected: store.categoryFilter,
                 onSelected: store.filterByCategory,
               ),
+              const SizedBox(height: AppSpacing.sm),
+              // Materia, modalidad, calificación y disponibilidad (plegados para
+              // que los resultados queden a la vista).
+              Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  key: const Key('more-filters'),
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                  expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                  initiallyExpanded: store.subjectFilter != null ||
+                      store.modalityFilter != null ||
+                      store.minRatingFilter != null ||
+                      store.availabilityFilter != null,
+                  title: Text('Más filtros', style: textTheme.titleSmall),
+                  children: [
+                      if (store.subjects.isNotEmpty) ...[
+                        const SizedBox(height: AppSpacing.md),
+                        Text('Materia', style: textTheme.titleSmall),
+                        const SizedBox(height: AppSpacing.sm),
+                        _ChipRow(
+                          options: [(null, _allLabel), for (final s in store.subjects) (s.id, s.nombre)],
+                          selected: store.subjectFilter,
+                          onSelected: store.filterBySubject,
+                        ),
+                      ],
+                      const SizedBox(height: AppSpacing.md),
+                      Text('Modalidad', style: textTheme.titleSmall),
+                      const SizedBox(height: AppSpacing.sm),
+                      _ChipRow(
+                        options: [(null, _allLabel), for (final m in TutoringModality.values) (m.name, m.label)],
+                        selected: store.modalityFilter?.name,
+                        onSelected: (v) =>
+                            store.filterByModality(v == null ? null : TutoringModality.values.byName(v)),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      Text('Calificación', style: textTheme.titleSmall),
+                      const SizedBox(height: AppSpacing.sm),
+                      _ChipRow(
+                        options: const [(null, _allLabel), ('4', '4 o más'), ('4.5', '4,5 o más')],
+                        selected: store.minRatingFilter == null ? null : _ratingKey(store.minRatingFilter!),
+                        onSelected: (v) => store.filterByMinRating(v == null ? null : double.parse(v)),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      Text('Disponibilidad', style: textTheme.titleSmall),
+                      const SizedBox(height: AppSpacing.sm),
+                      Wrap(
+                        spacing: AppSpacing.sm,
+                        children: [
+                          SubjectChip(
+                            key: const Key('availability-filter'),
+                            label: store.availabilityFilter == null
+                                ? 'Elegir día y hora'
+                                : '${Formatters.dateLong(store.availabilityFilter!)} · '
+                                    '${Formatters.time(store.availabilityFilter!.hour * 60 + store.availabilityFilter!.minute)}',
+                            selected: store.availabilityFilter != null,
+                            onTap: _pickAvailability,
+                          ),
+                          if (store.availabilityFilter != null)
+                            SubjectChip(label: 'Cualquier horario', onTap: () => store.filterByAvailability(null)),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
               if (careers.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.md),
                 Text('Carrera', style: textTheme.titleSmall),
@@ -185,6 +274,8 @@ class _TutorSearchScreenState extends State<TutorSearchScreen> {
     );
   }
 }
+
+String _ratingKey(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toString();
 
 /// Fila desplazable de chips: (valor, etiqueta). Valor null = "Todas".
 class _ChipRow extends StatelessWidget {

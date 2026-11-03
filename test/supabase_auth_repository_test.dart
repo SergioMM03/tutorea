@@ -648,28 +648,52 @@ void main() {
           remote: remote,
         );
 
-    test('local por defecto y si Supabase no está inicializado', () {
-      expect(AuthMode.parse(''), AuthMode.local);
-      expect(AuthMode.parse(' Supabase '), AuthMode.supabase);
-      expect(AuthMode.fromEnvironment(), AuthMode.local);
-      final local = sources(remote: false);
-      AppDataSources remote() => throw StateError('no debe crearse');
-      expect(selectDataSources(mode: AuthMode.local, supabaseReady: true, local: local, remote: remote, log: (_) {}),
-          same(local));
-      expect(selectDataSources(mode: AuthMode.supabase, supabaseReady: false, local: local, remote: remote, log: (_) {}),
-          same(local));
+    test('producción: Supabase por defecto; local solo explícito y nunca en release', () {
+      expect(AuthMode.resolve('', releaseMode: false), AuthMode.supabase);
+      expect(AuthMode.resolve('supabase', releaseMode: true), AuthMode.supabase);
+      expect(AuthMode.resolve('cualquier cosa', releaseMode: false), AuthMode.supabase);
+      expect(AuthMode.resolve(' Local ', releaseMode: false), AuthMode.local); // desarrollo
+      expect(AuthMode.resolve('local', releaseMode: true), AuthMode.supabase); // release: jamás local
+      expect(AuthMode.fromEnvironment(), AuthMode.supabase); // sin --dart-define
     });
 
-    test('si no se pueden crear los repositorios remotos, sigue en local', () {
-      final local = sources(remote: false);
+    test('sin Supabase inicializado: error, nunca datos locales', () {
+      var localCreated = false;
+      AppDataSources local() {
+        localCreated = true;
+        return sources(remote: false);
+      }
       expect(
-        selectDataSources(mode: AuthMode.supabase, supabaseReady: true, local: local,
-            remote: () => throw StateError('x'), log: (_) {}),
-        same(local),
+        () => selectDataSources(mode: AuthMode.supabase, supabaseReady: false, local: local,
+            remote: () => sources(remote: true), log: (_) {}),
+        throwsA(isA<DataSourcesUnavailable>()
+            .having((e) => e.message, 'message', supabaseNotConfiguredMessage)),
       );
+      expect(localCreated, isFalse);
+    });
+
+    test('si no se pueden crear los repositorios remotos: error, sin respaldo local', () {
+      var localCreated = false;
+      expect(
+        () => selectDataSources(mode: AuthMode.supabase, supabaseReady: true,
+            local: () {
+              localCreated = true;
+              return sources(remote: false);
+            },
+            remote: () => throw StateError('x'), log: (_) {}),
+        throwsA(isA<DataSourcesUnavailable>()
+            .having((e) => e.message, 'message', supabaseUnreachableMessage)),
+      );
+      expect(localCreated, isFalse);
       final remote = sources(remote: true);
-      expect(selectDataSources(mode: AuthMode.supabase, supabaseReady: true, local: local,
-          remote: () => remote, log: (_) {}), same(remote));
+      expect(selectDataSources(mode: AuthMode.supabase, supabaseReady: true,
+          local: () => throw StateError('no debe crearse'), remote: () => remote, log: (_) {}), same(remote));
+    });
+
+    test('el modo local de desarrollo no crea los repositorios remotos', () {
+      final local = sources(remote: false);
+      expect(selectDataSources(mode: AuthMode.local, supabaseReady: true, local: () => local,
+          remote: () => throw StateError('no debe crearse'), log: (_) {}), same(local));
     });
 
     test('Supabase no inicializado: no se crean los repositorios remotos', () {

@@ -1,3 +1,5 @@
+import '../../domain/repositories/repositories.dart';
+import '../device/device_university_selection.dart';
 import '../local/local_repositories.dart';
 import 'auth_selection.dart';
 import 'remote_auth_gateway.dart';
@@ -5,19 +7,18 @@ import 'remote_booking_repository.dart';
 import 'remote_catalog.dart';
 import 'remote_catalog_repositories.dart';
 import 'remote_follow_up_repositories.dart';
+import 'remote_tutor_photo_storage.dart';
 import 'remote_tutor_repository.dart';
 import 'supabase_auth_repository.dart';
 
 /// Arma los repositorios remotos sobre el cliente ya inicializado (publishable
 /// key + sesión del usuario). Lanza StateError si Supabase no está inicializado.
 ///
-/// [local] aporta lo que sigue siendo del dispositivo: la universidad elegida en
-/// la pantalla inicial y las cuentas del seed local (nombres en reservas
-/// antiguas). Desde la Fase 14.8 las reservas son de Supabase: no se leen ni se
-/// guardan en el dispositivo (las reservas locales antiguas no se mezclan ni se
-/// migran). Fase 14.9: confirmaciones, incidencias, reseñas y notificaciones
-/// también son solo de Supabase.
-AppDataSources supabaseDataSources(LocalRepositories local) {
+/// Fase 14.10: Supabase es la ÚNICA fuente de datos de producción. No se abre
+/// la base local ni se consultan cuentas o datos del seed local. Lo único que
+/// guarda el dispositivo es la universidad elegida en la pantalla inicial
+/// (preferencia, no dato de negocio) y la sesión de Supabase Auth.
+AppDataSources supabaseDataSources({UniversityRepository? deviceSelection}) {
   final client = initializedSupabaseClient();
   final catalogSource = SupabaseCatalogSource(client);
   final cache = RemoteCatalogCache(catalog: catalogSource, universities: catalogSource);
@@ -28,9 +29,9 @@ AppDataSources supabaseDataSources(LocalRepositories local) {
       gateway: SupabaseAuthGateway(client.auth),
       profiles: SupabaseProfileSource(client),
       catalog: cache,
-      legacyUsers: local.auth,
     ),
-    universities: RemoteUniversityRepository(cache, deviceSelection: local.universities),
+    universities: RemoteUniversityRepository(cache,
+        deviceSelection: deviceSelection ?? DeviceUniversitySelection()),
     subjects: RemoteSubjectRepository(cache),
     tutors: tutors,
     bookings: RemoteBookingRepository(SupabaseBookingSource(client), cache, tutors),
@@ -38,11 +39,12 @@ AppDataSources supabaseDataSources(LocalRepositories local) {
     adminIncidents: RemoteAdminIncidentRepository(followUp),
     reviews: RemoteReviewRepository(followUp),
     notifications: RemoteNotificationRepository(followUp),
+    photoStorage: RemoteTutorPhotoStorage(SupabasePhotoStorageSource(client), cache),
     remote: true,
   );
 }
 
-/// Fuentes locales de siempre.
+/// Fuentes locales: SOLO desarrollo y pruebas (TUTOREA_AUTH=local fuera de release).
 AppDataSources localDataSources(LocalRepositories local) => AppDataSources(
       auth: local.auth,
       universities: local.universities,

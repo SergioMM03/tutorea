@@ -143,6 +143,46 @@ supabase db push --dry-run              # debe listar solo 20261102000019 … 20
 Después del despliegue, comprobar que `notifications` está en la publicación
 `supabase_realtime`.
 
+### Fase 14.10: fotografías en Storage (migración 24)
+
+- Bucket privado `tutor-photos` (JPEG, PNG, WebP; 2 MB). Ruta
+  `<university_id>/<tutor_profile_id>/<archivo>`. Storage RLS: ve la misma universidad;
+  sube, reemplaza y borra solo el dueño del perfil. `set_tutor_photo(ruta | null)` fija o
+  quita la foto y devuelve la anterior (la app la borra: sin archivos huérfanos).
+- Reemplaza `prepare_tutor_profile` (copia de la 22) solo para aceptar `photo_path` null o
+  una ruta existente de la carpeta del propio perfil.
+
+```
+npx supabase db reset && npx supabase test db   # incluye tests/13_tutor_photos
+npx supabase db push --dry-run                  # debe listar solo 20261102000019 … 20261103000024
+```
+
+Después del despliegue, comprobar en Storage que el bucket `tutor-photos` existe y es privado.
+
+### Datos de demostración (presentación)
+
+No se versionan cuentas ni contraseñas. Pasos:
+
+1. En la app (Supabase), registra cuatro cuentas de ESEN con rol **Tutor**, carrera y año
+   reales, y una contraseña que solo conozca el equipo (no la escribas en el repositorio):
+   `demo.valeria@tutorea.app`, `demo.daniel@tutorea.app`, `demo.camila@tutorea.app`,
+   `demo.andres@tutorea.app`. (También se pueden crear desde la API de administración de Auth
+   con la metadata de la sección 4; nunca desde Flutter.)
+2. En el SQL Editor del panel ejecuta `supabase/scripts/demo_tutors.sql`. Crea o actualiza su
+   perfil de tutor, materias y horarios; se puede repetir sin duplicar. Omite las cuentas que
+   no existan.
+3. Opcional: cada tutor sube su foto desde *Mi perfil → Editar perfil*.
+
+El script no crea reservas, reseñas ni calificaciones: los tutores aparecen como «Nuevo».
+Para la demostración, registra además una cuenta de estudiante y crea las reservas en vivo.
+
+### Producción: solo Supabase (Fase 14.10)
+
+La app usa siempre Supabase (Auth y datos). Sin configuración válida o sin conexión muestra
+un error con «Reintentar»; no usa datos locales. El modo local de demostración existe solo
+para desarrollo y solo de forma explícita (`--dart-define=TUTOREA_AUTH=local`); en una
+compilación release se ignora.
+
 ## 4. Registro (metadata que exige handle_new_user)
 
 `signUp` / `auth.admin.createUser` deben enviar en `data` / `user_metadata`:

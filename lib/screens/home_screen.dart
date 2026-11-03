@@ -44,7 +44,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return Future.value();
     final universityId = context.read<SessionStore>().user?.universityId;
     if (universityId == null) return Future.value();
-    return context.read<TutorStore>().loadForUniversity(universityId);
+    // Su propio perfil de tutor no aparece para reservar.
+    final viewerId = context.read<SessionStore>().user?.id;
+    return context.read<TutorStore>().loadForUniversity(universityId, viewerId: viewerId);
   }
 
   void _selectFilter(String label) {

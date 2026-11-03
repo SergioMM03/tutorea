@@ -53,4 +53,16 @@ En la consola aparece `[Supabase] Supabase no configurado ... La app sigue en mo
 - Sin configuración, con una URL que no sea https, o si Supabase no responde en 5 s,
   la app sigue en modo local.
 
+### Diagnóstico del catálogo remoto (Fase 14.4)
+
+Prueba explícita de solo lectura: consulta `universities`, `careers` y `subjects`
+de ESEN en Supabase y las compara con el catálogo local (LocalSeed). La app normal
+no ejecuta esta consulta y no necesita Internet para arrancar.
+
+    flutter run -t lib/diagnostics/catalog_diagnostic_main.dart --dart-define-from-file=env/supabase.dev.json
+
+Consulta exitosa: en la consola y en pantalla (barra verde) aparece
+`[Diagnóstico catálogo] RESULTADO: OK — el catálogo remoto coincide con el local (1 universidad, 4 carreras, 13 materias).`
+Si algo falla aparece `RESULTADO: ERROR` o `RESULTADO: DIFERENCIAS` con el detalle (barra roja).
+
 Esquema de la base, seed y pruebas SQL: ver `supabase/README.md`.

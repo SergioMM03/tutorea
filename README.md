@@ -1,86 +1,225 @@
-# Tutorea – estructura base
+# Tutorea
 
-    flutter create .
-    flutter pub get
-    flutter run
+**Plataforma de tutorías académicas entre estudiantes universitarios.**
 
-`flutter create .` genera las carpetas android/ios sin tocar `lib/`.
-Las fotos de los tutores van en `assets/images/` (valeria.png, daniel.png, camila.png).
+Tutorea conecta estudiantes que necesitan apoyo académico con estudiantes que ofrecen tutorías. La aplicación permite explorar tutores, consultar sus perfiles, solicitar sesiones y gestionar el proceso de tutoría.
 
-## Modo local y Supabase (Fase 14.3)
+El proyecto está desarrollado con **Flutter** y utiliza **Supabase** como infraestructura backend.
 
-La app guarda todo en el dispositivo (shared_preferences). Supabase solo se
-**inicializa** cuando recibe una configuración válida; todavía no se consulta y
-los datos siguen siendo locales. Sin configuración, la app funciona igual que antes.
+## Características principales
 
-### Modo local (sin Supabase)
+- Registro e inicio de sesión de usuarios.
+- Selección de universidad y consulta de catálogo académico.
+- Perfiles de estudiantes y tutores.
+- Cuentas con doble rol: un usuario puede recibir y ofrecer tutorías.
+- Búsqueda y filtrado de tutores por materia, modalidad, disponibilidad, calificación y otros criterios.
+- Gestión de materias y horarios disponibles.
+- Fotografías de tutores mediante almacenamiento privado.
+- Solicitud, aceptación, rechazo y cancelación de reservas.
+- Confirmación de sesiones por ambas partes.
+- Reporte y gestión de incidencias.
+- Calificaciones y reseñas después de completar una tutoría.
+- Notificaciones relacionadas con las reservas y las incidencias.
 
-    flutter run
-    flutter test
+## Tecnologías
 
-En la consola aparece `[Supabase] Supabase no configurado ... La app sigue en modo local.`
+| Componente | Tecnología |
+|---|---|
+| Aplicación móvil | Flutter / Dart |
+| Backend | Supabase |
+| Base de datos | PostgreSQL |
+| Autenticación | Supabase Auth |
+| Seguridad de datos | Row Level Security (RLS) |
+| Operaciones de negocio | PostgreSQL RPC |
+| Fotografías | Supabase Storage |
+| Actualizaciones en tiempo real | Supabase Realtime |
+| Gestión de dependencias | Provider / ChangeNotifier |
 
-### Con Supabase inicializado
+## Arquitectura
 
-1. Copia el ejemplo y escribe los valores del proyecto
-   (panel de Supabase → Project Settings → API Keys):
+La aplicación utiliza una arquitectura por capas:
 
-       copy env\supabase.example.json env\supabase.dev.json      (Windows)
-       cp env/supabase.example.json env/supabase.dev.json        (macOS / Linux)
+1. **Presentación:** pantallas, componentes y navegación de Flutter.
+2. **Estado:** Stores basados en Provider y ChangeNotifier.
+3. **Dominio:** modelos, reglas de negocio y contratos de repositorios.
+4. **Datos:** implementaciones de repositorios y fuentes de datos.
+5. **Backend:** Supabase Auth, PostgreSQL, RLS, funciones RPC, triggers, Realtime y Storage.
 
-   ```json
-   {
-     "SUPABASE_URL": "https://<project-ref>.supabase.co",
-     "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_..."
-   }
-   ```
+Las pantallas interactúan con los Stores y los contratos de repositorios, evitando depender directamente de la implementación de Supabase.
 
-2. Ejecuta con ese archivo:
+En producción, las operaciones y validaciones críticas se realizan en el servidor. La aplicación no utiliza una base de datos local como respaldo automático.
 
-       flutter run --dart-define-from-file=env/supabase.dev.json
+## Requisitos
 
-   En la consola aparece `[Supabase] Inicializado (...). Datos todavía en modo local.`
+Para ejecutar el proyecto necesitas:
 
-`env/*.json` está en `.gitignore`; solo `env/supabase.example.json` va al repositorio.
+- Flutter y Dart compatibles con las versiones declaradas en `pubspec.yaml`.
+- Git.
+- Una conexión a Internet.
+- Acceso al proyecto de Supabase y sus credenciales públicas de aplicación.
 
-### Reglas de las claves
+Para ejecutar una instancia local de Supabase también necesitas Docker Desktop y Supabase CLI.
 
-- En Flutter va **solo la publishable key** (`sb_publishable_...`, o la anon key antigua).
-  Queda dentro de la app compilada: es pública por diseño y lo que protege los datos es RLS.
-- **Nunca** la `service_role` ni una clave `sb_secret_...`. La app las rechaza
-  (`RECHAZADA: ... clave secreta o service_role`) y sigue en modo local.
-  Esas claves solo se usan en scripts del equipo, con variables de entorno, fuera del repositorio.
-- Sin configuración, con una URL que no sea https, o si Supabase no responde en 5 s,
-  la app sigue en modo local.
+## Instalación
 
-### Diagnóstico del catálogo remoto (Fase 14.4)
+Clona el repositorio:
 
-Prueba explícita de solo lectura: consulta `universities`, `careers` y `subjects`
-de ESEN en Supabase y las compara con el catálogo local (LocalSeed). La app normal
-no ejecuta esta consulta y no necesita Internet para arrancar.
+```bash
+git clone https://github.com/SergioMM03/tutorea.git
+cd tutorea
+```
 
-    flutter run -t lib/diagnostics/catalog_diagnostic_main.dart --dart-define-from-file=env/supabase.dev.json
+Instala las dependencias:
 
-Consulta exitosa: en la consola y en pantalla (barra verde) aparece
-`[Diagnóstico catálogo] RESULTADO: OK — el catálogo remoto coincide con el local (1 universidad, 4 carreras, 13 materias).`
-Si algo falla aparece `RESULTADO: ERROR` o `RESULTADO: DIFERENCIAS` con el detalle (barra roja).
+```bash
+flutter pub get
+```
 
-### Producción: solo Supabase (Fase 14.10)
+## Configuración de Supabase
 
-La app usa siempre Supabase: Auth, perfiles, catálogo, tutores, disponibilidad,
-fotografías (Storage), reservas, confirmaciones, incidencias, reseñas y notificaciones.
+La aplicación necesita las siguientes variables de entorno de compilación:
 
-    flutter run --dart-define-from-file=env/supabase.dev.json
+- `SUPABASE_URL`
+- `SUPABASE_PUBLISHABLE_KEY`
 
-Si falta la configuración o el servidor no responde, la app muestra «Sin conexión con
-Tutorea» con un botón «Reintentar». Nunca cambia a datos locales.
+### 1. Crear el archivo de configuración
 
-Solo para desarrollo (nunca en release) existe el modo local de demostración, que hay
-que pedir explícitamente:
+Copia el archivo de ejemplo:
 
-    flutter run --dart-define=TUTOREA_AUTH=local
+**Windows PowerShell:**
 
-Lo único que guarda el dispositivo en producción es la universidad elegida en la
-pantalla inicial (preferencia) y la sesión de Supabase Auth.
+```powershell
+Copy-Item env/supabase.example.json env/supabase.dev.json
+```
 
-Esquema de la base, seed y pruebas SQL: ver `supabase/README.md`.
+**macOS / Linux:**
+
+```bash
+cp env/supabase.example.json env/supabase.dev.json
+```
+
+### 2. Configurar las credenciales
+
+Edita `env/supabase.dev.json`:
+
+```json
+{
+  "SUPABASE_URL": "https://<project-ref>.supabase.co",
+  "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_..."
+}
+```
+
+Sustituye los valores por los correspondientes a tu proyecto de Supabase.
+
+### 3. Ejecutar la aplicación
+
+```bash
+flutter run --dart-define-from-file=env/supabase.dev.json
+```
+
+**Importante sobre las credenciales:**
+
+- En Flutter se utiliza únicamente la publishable key (o la antigua anon key).
+- Nunca incluyas una clave `service_role` o `sb_secret_` en la aplicación.
+- El archivo `env/supabase.dev.json` está excluido del repositorio mediante `.gitignore`.
+- El archivo `env/supabase.example.json` contiene únicamente valores de ejemplo.
+
+## Modos de ejecución
+
+### Producción y conexión con Supabase
+
+La aplicación utiliza Supabase para autenticación y operaciones de datos.
+
+Si la configuración está incompleta o no se puede establecer la conexión, se muestra la pantalla **«Sin conexión con Tutorea»**, con la opción de reintentar.
+
+La aplicación no cambia automáticamente a datos locales.
+
+### Modo local de desarrollo
+
+Existe un modo local explícito para desarrollo y demostraciones:
+
+```bash
+flutter run --dart-define=TUTOREA_AUTH=local
+```
+
+Este modo no representa el funcionamiento de producción y se ignora en compilaciones release.
+
+## Base de datos y backend
+
+La estructura del backend se encuentra en el directorio `supabase/`.
+
+```text
+supabase/
+├── migrations/       # Migraciones de PostgreSQL
+├── tests/            # Pruebas automatizadas con pgTAP
+├── scripts/          # Scripts auxiliares y datos de demostración
+├── seed.sql          # Catálogo inicial
+└── README.md         # Documentación del backend
+```
+
+El backend incluye:
+
+- Perfiles y universidades.
+- Carreras y materias.
+- Perfiles de tutores y disponibilidad.
+- Reservas y control de horarios.
+- Confirmaciones de sesiones.
+- Incidencias e historial de eventos.
+- Reseñas y calificaciones.
+- Notificaciones.
+- Políticas RLS y funciones RPC.
+- Almacenamiento privado de fotografías.
+
+Para conocer los detalles de las migraciones, configuración de Auth, despliegue, datos de demostración y pruebas de base de datos, consulta [`supabase/README.md`](supabase/README.md).
+
+## Pruebas
+
+Para ejecutar el análisis estático:
+
+```bash
+flutter analyze
+```
+
+Para ejecutar las pruebas de Flutter:
+
+```bash
+flutter test
+```
+
+Para ejecutar las pruebas SQL con Supabase local:
+
+```bash
+supabase start
+supabase db reset
+supabase test db
+```
+
+La ejecución de pruebas SQL requiere Docker Desktop y una instancia local de Supabase.
+
+## Datos de demostración
+
+El proyecto incluye un script para preparar perfiles de tutores de demostración:
+
+```text
+supabase/scripts/demo_tutors.sql
+```
+
+Este script actualiza los perfiles, materias y horarios de las cuentas de demostración existentes. **No crea usuarios de autenticación ni contraseñas.**
+
+Consulta `supabase/README.md` para conocer el procedimiento completo.
+
+## Equipo de desarrollo
+
+Proyecto académico desarrollado para la asignatura **Desarrollo de Aplicaciones Móviles**, en la Escuela Superior de Economía y Negocios (ESEN).
+
+| Integrante | Responsabilidad |
+|---|---|
+| Sergio Andrés Mandujano Membreño | Backend e infraestructura |
+| Fernando Andrés Mendez Abrego | Usuarios y experiencia |
+| Kevin Giovanni Landos Castaneda | Tutores y catálogo |
+| Marco Andrés Gutierrez Ramos | Reservas y sesiones |
+| Raúl Ariel Somoza Barahona | Administración y confianza |
+
+## Repositorio
+
+[GitHub – SergioMM03/Tutorea](https://github.com/SergioMM03/tutorea)
